@@ -20,6 +20,7 @@ public final class MsbNetwork {
         PayloadRegistrar registrar = event.registrar(PROTOCOL_VERSION);
         registrar.playToClient(MatchStatePayload.TYPE, MatchStatePayload.STREAM_CODEC, MatchStatePayload::handle);
         registrar.playToClient(SyncFactionPayload.TYPE, SyncFactionPayload.STREAM_CODEC, SyncFactionPayload::handle);
+        registrar.playToClient(UnitPositionsPayload.TYPE, UnitPositionsPayload.STREAM_CODEC, UnitPositionsPayload::handle);
     }
 
     private MsbNetwork() {

@@ -122,4 +122,13 @@ public final class AiManager {
         }
         return result;
     }
+
+    /** 全部 AI 单位（跨阵营扁平列表，供战术地图广播使用） */
+    public List<AiUnit> allUnits() {
+        List<AiUnit> all = new ArrayList<>();
+        for (List<AiUnit> list : units.values()) {
+            all.addAll(list);
+        }
+        return all;
+    }
 }

@@ -29,5 +29,10 @@ public final class MsbLanguageProvider extends LanguageProvider {
         // 聊天播报
         this.add("msb.chat.settle", "Zone settled:");
         this.add("msb.chat.ai_replaced", "AI %s replaced by a real player");
+        // 按键与战术地图
+        this.add("key.categories.msb", "Mercenary Sandbox Shooter");
+        this.add("key.msb.tactical_map", "Tactical Map");
+        this.add("msb.tactical_map.title", "Tactical Map");
+        this.add("msb.tactical_map.waiting", "Waiting for match data...");
     }
 }

@@ -4,6 +4,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
@@ -55,7 +56,15 @@ public final class MsbServerEvents {
         FactionManager.copyOnRespawn(newPlayer, oldPlayer);
     }
 
-    /** 服务端每 tick：控制区结算驱动 + AI 惰性移动 */
+    /** 玩家受到伤害：记录交战时间（战术地图敌情判定依据，docs/02 §3.9） */
+    @SubscribeEvent
+    public static void onLivingDamage(LivingDamageEvent.Pre event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            MatchManager.get(player.server).recordDamageTick(player);
+        }
+    }
+
+    /** 服务端每 tick：控制区结算驱动 + AI 惰性移动 + 战术地图单位广播 */
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         MinecraftServer server = event.getServer();

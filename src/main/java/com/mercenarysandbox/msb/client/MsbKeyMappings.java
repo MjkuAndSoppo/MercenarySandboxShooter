@@ -1,0 +1,31 @@
+package com.mercenarysandbox.msb.client;
+
+import org.lwjgl.glfw.GLFW;
+
+import com.mojang.blaze3d.platform.InputConstants;
+
+import net.minecraft.client.KeyMapping;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.neoforge.client.registration.KeyMappingRegistry;
+
+import com.mercenarysandbox.msb.MercenarySandboxShooter;
+
+/**
+ * 客户端按键注册（MOD 总线）：战术地图 M 键。
+ */
+@EventBusSubscriber(modid = MercenarySandboxShooter.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+public final class MsbKeyMappings {
+    public static final KeyMapping TACTICAL_MAP_KEY = new KeyMapping(
+            "key.msb.tactical_map", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, "key.categories.msb");
+
+    @SubscribeEvent
+    public static void onClientSetup(FMLClientSetupEvent event) {
+        KeyMappingRegistry.registerKeyMapping(TACTICAL_MAP_KEY);
+    }
+
+    private MsbKeyMappings() {
+    }
+}
