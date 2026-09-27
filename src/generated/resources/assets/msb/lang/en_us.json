@@ -1,0 +1,12 @@
+{
+  "block.msb.test_block": "MSB Test Block",
+  "item.msb.test_item": "MSB Test Item",
+  "itemGroup.msb": "Mercenary Sandbox Shooter",
+  "msb.chat.ai_replaced": "AI %s replaced by a real player",
+  "msb.chat.settle": "Zone settled:",
+  "msb.hud.settle": "Settle in %s s",
+  "msb.hud.zone": "Zone (%s,%s) R=%s",
+  "team.msb.lonestar": "LONESTAR",
+  "team.msb.manticore": "MANTICORE",
+  "team.msb.valkyra": "VALKYRA"
+}

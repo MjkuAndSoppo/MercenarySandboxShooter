@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MercenarySandboxShooter · Mod 交互原型</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ===== App Shell：固定侧栏 + 顶栏 + 内容槽（nav 顺序冻结，见 design-contract） ===== -->
+<aside class="app-nav">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+    </div>
+    <div>
+      <div class="brand-name">MercenarySandboxShooter</div>
+      <div class="brand-sub">MERCENARY SANDBOX</div>
+    </div>
+  </div>
+  <nav class="nav-items">
+    <a class="nav-item" data-nav="overview" href="#/overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>概览</span></a>
+    <a class="nav-item" data-nav="faction" href="#/faction"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>阵营</span></a>
+    <a class="nav-item" data-nav="loadout" href="#/loadout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2"/><path d="M9 6V5a3 3 0 0 1 6 0v1"/><path d="M9 10h6"/><path d="M9 14h6"/></svg><span>配装</span></a>
+    <a class="nav-item" data-nav="battlefield" href="#/battlefield"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg><span>战场</span></a>
+    <a class="nav-item" data-nav="build" href="#/build"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 12-8.4 8.4a1 1 0 1 1-3-3L12 9"/><path d="m18 15 4-4"/><path d="m21.5 11.5-1.9-1.9a2 2 0 0 1-.6-1.4V7l-2.3-2.3a6 6 0 0 0-4.2-1.8L9 2.9l.9.8a6.2 6.2 0 0 1 2.1 4.7V10l2 2h1.2a2 2 0 0 1 1.4.6L18.5 14.5"/></svg><span>建造</span></a>
+  </nav>
+  <div class="nav-foot">
+    <div class="ver">v0.1 · NEOFORGE MOD UI MOCK</div>
+  </div>
+</aside>
+
+<header class="topbar">
+  <div class="tb-faction">
+    <span class="dot" id="tbFactionDot"></span>
+    <span id="tbFactionName" class="dim">未分配阵营</span>
+  </div>
+  <div class="tb-cash">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6"/><path d="M15.5 4.2a6 6 0 0 1 0 9.6M4.5 13.8a6 6 0 0 0 0-9.6"/></svg>
+    <span class="mono" id="tbCash">$10,000</span>
+  </div>
+  <div class="tb-score" id="tbScore"></div>
+</header>
+
+<main class="app-content">
+
+  <!-- ================= 概览 ================= -->
+  <section class="screen" data-screen="overview" id="scr-overview">
+    <div class="hero rise">
+      <div>
+        <h1 class="page-title">MercenarySandboxShooter</h1>
+        <p class="page-sub">一个让《我的世界》玩法向 WARDOGS 靠拢的 NeoForge Mod 交互原型 —— 三阵营争夺、控制区计分、建造与破坏、现金经济。此页面用于演示各玩法模块的界面走向，非最终 Mod 成品。</p>
+      </div>
+      <div class="tb-cash" style="flex-direction:column; align-items:flex-end;">
+        <span class="mono dim" style="font-size:11px; letter-spacing:2px;">CORE MODULES</span>
+        <span class="mono" style="font-size:18px;">05 · P0 SCOPE</span>
+      </div>
+    </div>
+
+    <div class="pillars">
+      <div class="card pillar rise">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+        <h3>三阵营 · 控制区计分</h3>
+        <p>每 30s 结算一次，区内人数最多者 +1 分，先到 100 分获胜。Hot Zone 内人数计 2 倍、收益翻倍；集齐塔楼码字可把控制区拉向己方塔楼。</p>
+      </div>
+      <div class="card pillar rise">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M16 12h.01"/></svg>
+        <h3>建造与破坏</h3>
+        <p>FOB 前哨为建造根，解锁沙袋墙、碉堡、复活信标、雷达塔、钻井台等工事。工事带耐久可被摧毁，摧毁敌方工事获得赏金，FOB 可升级 III 级。</p>
+      </div>
+      <div class="card pillar rise">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="6"/><path d="M15.5 4.2a6 6 0 0 1 0 9.6M4.5 13.8a6 6 0 0 0 0-9.6"/></svg>
+        <h3>现金经济</h3>
+        <p>击杀、占区、热点、拆工事赚现金；买枪械、护甲、消耗品构成配装，负重影响移速；死亡丢装保留现金，账号级解锁长期目标。</p>
+      </div>
+    </div>
+
+    <h2 class="sec-title rise" style="margin-top:32px;">WARDOGS → MC 映射</h2>
+    <div class="map-row rise">
+      <div class="card map-cell">
+        <div class="src"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20s-7-4.6-9.3-9A5.2 5.2 0 0 1 12 6.6 5.2 5.2 0 0 1 21.3 11C19 15.4 12 20 12 20z"/></svg><b>WARDOGS 机制</b></div>
+        <div class="dst"><span class="arrow">→</span> KotH 控制区 / Hot Zone</div>
+        <div class="dst"><span class="arrow">→</span> Tower Code 集码拉区</div>
+        <div class="dst"><span class="arrow">→</span> FOB / Drill Rig 钻井台</div>
+        <div class="dst"><span class="arrow">→</span> Cash · Loadout · Weight</div>
+      </div>
+      <div class="card map-cell">
+        <div class="src"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 21V4a1 1 0 0 1 1-1h14"/><path d="M7 9h8M7 13h8M7 17h5"/></svg><b>MC 承载方式</b></div>
+        <div class="dst"><span class="arrow">→</span> 逻辑控制区 + 服务端 30s 结算</div>
+        <div class="dst"><span class="arrow">→</span> 塔楼方块 + 码字队伍数据</div>
+        <div class="dst"><span class="arrow">→</span> 方块实体 + 耐久 + 破坏系统</div>
+        <div class="dst"><span class="arrow">→</span> 附体数据 + 配装商店</div>
+      </div>
+    </div>
+
+    <h2 class="sec-title rise" style="margin-top:32px;">P0 可玩闭环</h2>
+    <div class="card rise" style="margin-bottom:8px;">
+      <p class="muted" style="line-height:2;">出生 → <b class="mono" style="color:var(--primary)">争夺控制区（30s 结算）</b> → 抢占 Hot Zone → 击杀/拆工事赚现金 → <b class="mono" style="color:var(--primary)">配置下一条命</b> → 建造/升级 FOB → 打满 100 分获胜。</p>
+    </div>
+    <div class="rise" style="margin-top:20px; display:flex; gap:12px; flex-wrap:wrap;">
+      <a class="btn btn-primary" href="#/faction">选择阵营</a>
+      <a class="btn btn-ghost" href="#/battlefield">进入战场演示</a>
+      <a class="btn btn-ghost" href="#/build">查看建造系统</a>
+    </div>
+  </section>
+
+  <!-- ================= 阵营 ================= -->
+  <section class="screen" data-screen="faction" id="scr-faction">
+    <h1 class="page-title rise">选择阵营</h1>
+    <p class="page-sub rise">每局开局分配一次；阵营 = 计分板队伍（友伤禁用、名字染色）。人数最少的一方获得 1.1× 赏金加成，动态平衡。</p>
+    <div class="faction-grid" id="factionGrid"></div>
+  </section>
+
+  <!-- ================= 配装 ================= -->
+  <section class="screen" data-screen="loadout" id="scr-loadout">
+    <h1 class="page-title rise">配装商店</h1>
+    <p class="page-sub rise">用现金购买装备组成下一条命。死亡时掉落整套配装、保留现金；超重将降低移速。</p>
+    <div class="loadout-bar rise">
+      <div class="weight-meter">
+        <div class="lbl"><span>负重</span><b id="weightLbl">0 / 14.0 kg</b></div>
+        <div class="progress"><i id="weightBar" style="width:0%; background:var(--success);"></i></div>
+      </div>
+      <button class="btn btn-primary" id="deployBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        部署上场
+      </button>
+    </div>
+    <div class="tabs rise" id="itemTabs">
+      <button class="tab active" data-cat="weapon">武器</button>
+      <button class="tab" data-cat="armor">护甲</button>
+      <button class="tab" data-cat="consumable">消耗品</button>
+    </div>
+    <div class="grid grid-4" id="itemGrid"></div>
+  </section>
+
+  <!-- ================= 战场 HUD ================= -->
+  <section class="screen" data-screen="battlefield" id="scr-battlefield">
+    <h1 class="page-title rise">战场 HUD（演示模拟）</h1>
+    <p class="page-sub rise">服务端权威计分的界面呈现：控制区 30s 结算、Hot Zone 每 45s 迁移、塔楼集码拉区。原型内为本地模拟，用于演示 HUD 布局与交互流。</p>
+    <div class="bf-grid">
+      <div class="bf-main">
+        <div class="zone-panel rise">
+          <div class="zone-canvas"></div>
+          <div class="zone-ring" id="zoneRing"></div>
+          <div class="zone-ring hot" id="hotRing"></div>
+          <div class="zone-label" id="zoneLabel" style="top:12px; left:12px;">控制区 · CT-7</div>
+          <div class="zone-label" id="hotLabel" style="color:var(--primary);"></div>
+          <div class="zone-settle">
+            <div>
+              <div class="timer-big" id="tickTimer">30</div>
+              <div class="tick-info" id="tickInfo">距下次结算</div>
+            </div>
+            <div class="tick-info" style="flex:1;" id="zoneHint">区内存活人数最多的阵营 +1 分 · 先到 100 获胜</div>
+          </div>
+        </div>
+
+        <div class="side-list rise">
+          <div class="card side-card">
+            <h2 class="sec-title">塔楼集码（Tower Code）</h2>
+            <div class="tower-grid" id="towerGrid"></div>
+            <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+              <div class="sequence-strip" id="seqStrip"></div>
+              <button class="btn btn-ghost btn-sm" id="towerInfoBtn">机制说明</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="side-list rise">
+          <div class="card side-card">
+            <h2 class="sec-title">击杀流</h2>
+            <div class="killfeed" id="killfeed"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bf-main">
+        <div class="card score-board rise">
+          <h2 class="sec-title">计分板 · 先到 100</h2>
+          <div id="scoreRows"></div>
+        </div>
+        <div class="card rise">
+          <h2 class="sec-title">FOB · 钻井台</h2>
+          <div class="row muted" style="display:flex; justify-content:space-between; font-size:13px; margin:6px 0;">
+            <span>状态</span><b class="mono" id="drillState" style="color:var(--text-dim);">未部署（P1 解锁）</b>
+          </div>
+          <div class="row muted" style="display:flex; justify-content:space-between; font-size:13px; margin:6px 0;">
+            <span>燃料</span><b class="mono" id="drillFuel">--</b>
+          </div>
+          <p class="dim" style="font-size:12px; line-height:1.7;">钻井台把控制区拉向己方 FOB 位置，同时向全图广播，等于邀请三方来攻。建造入口见「建造」页。</p>
+        </div>
+        <div class="card rise">
+          <h2 class="sec-title">动态平衡</h2>
+          <p class="dim" style="font-size:12px; line-height:1.7;">每 30s 结算一次三方人数，人数最少阵营获得 1.1× 赏金系数（WARDOGS 风格平衡）。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 建造 ================= -->
+  <section class="screen" data-screen="build" id="scr-build">
+    <h1 class="page-title rise">建造系统 · FOB</h1>
+    <p class="page-sub rise">工事费用从队伍金库扣除（个人现金可向金库转账）。FOB 升级解锁更高级工事；工事有耐久，摧毁敌方工事获得赏金。</p>
+    <div class="fob-panel rise">
+      <span class="tag">FOB</span>
+      <b class="fob-level" id="fobLevel">Lv I</b>
+      <span class="muted mono" id="teamCashLbl">队伍金库 $12,000</span>
+      <button class="btn btn-ghost btn-sm" id="upgradeFobBtn">升级 FOB（$4,000）</button>
+    </div>
+    <h2 class="sec-title rise" style="margin-top:28px;">工事目录</h2>
+    <div class="fort-grid" id="fortGrid"></div>
+    <h2 class="sec-title rise" style="margin-top:32px;">已建造</h2>
+    <div class="card rise" id="builtList" style="min-height:60px;"></div>
+  </section>
+
+</main>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="mock.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

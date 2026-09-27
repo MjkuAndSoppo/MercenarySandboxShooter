@@ -1,0 +1,74 @@
+package com.mercenarysandbox.msb.faction;
+
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+
+import net.minecraft.ChatFormatting;
+
+/**
+ * 三大阵营（WARDOGS 玩法层）。
+ * M1 起用于：计分板队伍映射、玩家阵营附体、HUD 计分与 Tab/名字染色。
+ */
+public enum Faction {
+    /** 星野孤星 —— 红 */
+    LONESTAR(0, ChatFormatting.RED, "msb_lonestar", "team.msb.lonestar"),
+    /** 瓦尔基里 —— 蓝 */
+    VALKYRA(1, ChatFormatting.BLUE, "msb_valkyra", "team.msb.valkyra"),
+    /** 曼提柯尔 —— 绿 */
+    MANTICORE(2, ChatFormatting.GREEN, "msb_manticore", "team.msb.manticore"),
+    /** 未分配哨兵（附体默认值，加入时会被替换） */
+    NONE(3, ChatFormatting.GRAY, "msb_none", "team.msb.none");
+
+    /** 网络传输用整数 id（独立于枚举序，避免重排破坏存档兼容） */
+    private final int id;
+    private final ChatFormatting chatColor;
+    /** 计分板队伍名（Scoreboard 队伍名 ≤16 字符） */
+    private final String teamName;
+    /** 队伍显示名语言键 */
+    private final String displayKey;
+
+    Faction(int id, ChatFormatting chatColor, String teamName, String displayKey) {
+        this.id = id;
+        this.chatColor = chatColor;
+        this.teamName = teamName;
+        this.displayKey = displayKey;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public ChatFormatting getChatColor() {
+        return chatColor;
+    }
+
+    public String getTeamName() {
+        return teamName;
+    }
+
+    public String getDisplayKey() {
+        return displayKey;
+    }
+
+    /** 附体序列化用 Codec（字符串名；未知值报错，由调用方兜底 NONE） */
+    public static final Codec<Faction> CODEC = Codec.STRING.flatXmap(
+            name -> {
+                for (Faction f : values()) {
+                    if (f.name().equalsIgnoreCase(name)) {
+                        return DataResult.success(f);
+                    }
+                }
+                return DataResult.error(() -> "未知阵营: " + name);
+            },
+            f -> DataResult.success(f.name()));
+
+    /** 按网络 id 取阵营；未知 id 返回 NONE */
+    public static Faction fromId(int id) {
+        for (Faction f : values()) {
+            if (f.id == id) {
+                return f;
+            }
+        }
+        return NONE;
+    }
+}
