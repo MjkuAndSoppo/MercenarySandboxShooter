@@ -8,8 +8,7 @@ import net.minecraft.client.KeyMapping;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
-import net.neoforged.neoforge.client.registration.KeyMappingRegistry;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 
 import com.mercenarysandbox.msb.MercenarySandboxShooter;
 
@@ -22,8 +21,8 @@ public final class MsbKeyMappings {
             "key.msb.tactical_map", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, "key.categories.msb");
 
     @SubscribeEvent
-    public static void onClientSetup(FMLClientSetupEvent event) {
-        KeyMappingRegistry.registerKeyMapping(TACTICAL_MAP_KEY);
+    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
+        event.register(TACTICAL_MAP_KEY);
     }
 
     private MsbKeyMappings() {
