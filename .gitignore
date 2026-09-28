@@ -38,3 +38,18 @@ run/
 **/src/generated/**/.cache/
 repo/
 !**/src/**/repo/
+
+### SBW 参考用解压产物（禁止入库，GPL/LGPL 红线）###
+# SBW jar 或依赖 jar 解压到【根目录】的临时产物；前缀 / 限定只在项目根生效，
+# 不影响 src/main/resources/assets 等正常资源目录
+/reference/
+/sbw_extract/
+/com/
+/META-INF/
+/assets/
+/data/
+/resourcepacks/
+/logo.png
+/mixins.superbwarfare.json
+/kubejs.*
+/.cache/
