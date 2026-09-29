@@ -34,5 +34,29 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("key.msb.tactical_map", "Tactical Map");
         this.add("msb.tactical_map.title", "Tactical Map");
         this.add("msb.tactical_map.waiting", "Waiting for match data...");
+        // 战术地图（2026-09-29 增强版）
+        this.add("msb.tactical_map.follow", "Follow");
+        this.add("msb.tactical_map.free", "Free");
+        this.add("msb.tactical_map.unit", "Unit");
+        this.add("msb.tactical_map.countdown", "%s s");
+        this.add("msb.tactical_map.distance", "Distance: %s blocks");
+        this.add("msb.tactical_map.status", "Status: %s");
+        this.add("msb.tactical_map.engaged", "Engaged");
+        this.add("msb.tactical_map.hidden", "Hidden");
+        this.add("msb.tactical_map.cursor", "X %s Z %s  |  %s blocks away");
+        this.add("msb.tactical_map.hint", "Wheel/right slider: zoom | Drag: pan | Top-right: lock north | Bottom-right: zone/me");
+        // 按钮：右上角锁定北向 / 右下角圈居中、我（跟随-自由）
+        this.add("msb.tactical_map.lock", "Lock");
+        this.add("msb.tactical_map.unlock", "Unlock");
+        this.add("msb.tactical_map.btn.zone_center", "Zone");
+        this.add("msb.tactical_map.edge.me", "You: %s blocks");
+        this.add("msb.tactical_map.edge.zone", "Zone: %s blocks");
+        this.add("msb.tactical_map.legend.spawn", "Spawn");
+        this.add("msb.tactical_map.legend.zone", "Control Zone");
+        this.add("msb.tactical_map.legend.boundary", "Map Boundary");
+        this.add("msb.tactical_map.legend.friendly", "Friend (T)");
+        this.add("msb.tactical_map.legend.enemy", "Enemy (E · engaged/AI)");
+        this.add("msb.tactical_map.legend.neutral", "Unassigned");
+        this.add("msb.tactical_map.legend.self", "You");
     }
 }

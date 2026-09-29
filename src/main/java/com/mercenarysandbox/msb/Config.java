@@ -39,6 +39,11 @@ public class Config {
             .comment("Target combat units per faction (real players + AI). AI count = target - real players")
             .defineInRange("aiTargetPerFaction", 10, 1, 100);
 
+    // ===== 战术地图（docs/02 §3.9）=====
+    public static final ModConfigSpec.BooleanValue TACTICAL_MAP_ROTATE_WITH_PLAYER = BUILDER
+            .comment("Rotate the tactical map with the player's facing direction. Disable for a fixed north-up map")
+            .define("tacticalMapRotateWithPlayer", true);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean validateItemName(final Object obj) {

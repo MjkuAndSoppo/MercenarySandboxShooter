@@ -15,14 +15,12 @@ import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.network.MatchStatePayload;
 
 /**
- * HUD 计分板（GuiGraphics 自绘，P0 零重 UI 库，docs/02 §3.7）。
- * 渲染：控制区信息、结算倒计时、三方分数（阵营色）。
+ * HUD 顶部对局栏（GuiGraphics 自绘，P0 零重 UI 库，docs/02 §3.7）。
+ * 全宽顶部条：三方分数（阵营色分段）整体居中，结算倒计时右对齐仅显示「xx S」。
  */
 @EventBusSubscriber(modid = MercenarySandboxShooter.MODID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
 public final class MsbHudOverlay {
-    private static final int PANEL_WIDTH = 170;
-    private static final int PANEL_TOP = 4;
-    private static final int TEXT_PAD_X = 6;
+    private static final int BAR_H = 16;
 
     @SubscribeEvent
     public static void onRenderGui(RenderGuiEvent.Post event) {
@@ -35,26 +33,29 @@ public final class MsbHudOverlay {
         Font font = Minecraft.getInstance().font;
         int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
 
-        int left = (screenWidth - PANEL_WIDTH) / 2;
-        int rowH = font.lineHeight + 6;
-        int panelH = rowH * 5 + 8; // 控制区 + 倒计时 + 三方分数
-        int top = PANEL_TOP;
+        // 全宽顶部条
+        g.fill(0, 0, screenWidth, BAR_H + 2, 0xC0101010);
 
-        // 半透明底
-        g.fill(left, top, left + PANEL_WIDTH, top + panelH, 0xC0101010);
+        // 三色分数整体居中
+        Component ls = factionLine(Faction.LONESTAR, state.lonestarScore());
+        Component va = factionLine(Faction.VALKYRA, state.valkyraScore());
+        Component mt = factionLine(Faction.MANTICORE, state.manticoreScore());
+        int total = font.width(ls) + font.width(va) + font.width(mt) + 12;
+        int x = Math.max(8, screenWidth / 2 - total / 2);
+        x = drawSegment(g, font, x, ls, rgb(Faction.LONESTAR));
+        x = drawSegment(g, font, x, va, rgb(Faction.VALKYRA));
+        drawSegment(g, font, x, mt, rgb(Faction.MANTICORE));
 
-        int y = top + 4;
-        g.drawString(font, Component.translatable("msb.hud.zone",
-                state.zoneCenterX(), state.zoneCenterZ(), state.zoneRadius()), left + TEXT_PAD_X, y, 0xFFFFFF);
-        y += rowH;
-        g.drawString(font, Component.translatable("msb.hud.settle", state.countdownSeconds()),
-                left + TEXT_PAD_X, y, 0xFFFFFF);
-        y += rowH;
-        g.drawString(font, factionLine(Faction.LONESTAR, state.lonestarScore()), left + TEXT_PAD_X, y, rgb(Faction.LONESTAR));
-        y += rowH;
-        g.drawString(font, factionLine(Faction.VALKYRA, state.valkyraScore()), left + TEXT_PAD_X, y, rgb(Faction.VALKYRA));
-        y += rowH;
-        g.drawString(font, factionLine(Faction.MANTICORE, state.manticoreScore()), left + TEXT_PAD_X, y, rgb(Faction.MANTICORE));
+        // 刷新时间（结算倒计时）偏右，仅显示「xx S」
+        Component cd = Component.literal(state.countdownSeconds() + " S");
+        g.drawString(font, cd, screenWidth - 6 - font.width(cd), 8, 0xFFFFFF);
+    }
+
+    /** 绘制一段文本并返回下一个绘制 x（用于分段着色，y 固定 8 与顶栏居中） */
+    private static int drawSegment(GuiGraphics g, Font font, int x, Component text, int color) {
+        int w = font.width(text);
+        g.drawString(font, text, x, 8, color);
+        return x + w + 6;
     }
 
     private static Component factionLine(Faction faction, int score) {
