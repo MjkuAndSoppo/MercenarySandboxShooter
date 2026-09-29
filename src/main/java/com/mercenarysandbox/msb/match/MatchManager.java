@@ -8,11 +8,15 @@ import java.util.Map;
 import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import com.mercenarysandbox.msb.Config;
@@ -43,15 +47,22 @@ public final class MatchManager {
     private static MatchManager instance;
 
     private final MinecraftServer server;
+    private final BaseData baseData;
     private ControlZone zone;
+    /** 三阵营基地方块位置（安全区中心 = 方块位置，跟随方块实时坐标） */
+    private final Map<Faction, BlockPos> basePositions = new EnumMap<>(Faction.class);
+    /** 三阵营基地方块安全区（半径 = Config.BASE_RADIUS，复用 ControlZone 平面距离判定） */
+    private final Map<Faction, ControlZone> baseZones = new EnumMap<>(Faction.class);
     private final Map<Faction, Integer> scores = new EnumMap<>(Faction.class);
     private final Map<UUID, Integer> lastHurtTick = new HashMap<>();
     private int countdownTicks;
     private int tickCounter;
     private int unitTickCounter;
+    private int baseRegenTick;
 
     private MatchManager(MinecraftServer server) {
         this.server = server;
+        this.baseData = BaseData.get(server);
     }
 
     /** 获取当前服务器的对局管理器（服务器实例变化时重建） */
@@ -75,24 +86,88 @@ public final class MatchManager {
             }
         }
         FactionManager.ensureTeams(server.getScoreboard());
+        // 恢复持久化的基地坐标（重进存档后安全区仍生效）
+        restoreBases();
+        // 基地方块不自动放置：由玩家放置 base_block_* 方块动态注册（docs/02 §3.13）
         AiManager.get(server).reconcileAll();
         MercenarySandboxShooter.LOGGER.info("MSB 控制区初始化: 圆心({},{},{}) 半径{} 结算{}s",
                 zone.getCenterX(), zone.getCenterY(), zone.getCenterZ(), zone.getRadius(), Config.SETTLE_INTERVAL_SECONDS.get());
+    }
+
+    /** 从 SavedData 恢复三阵营基地（安全区中心跟随方块坐标，重进存档生效） */
+    private void restoreBases() {
+        for (Faction f : new Faction[]{Faction.LONESTAR, Faction.VALKYRA, Faction.MANTICORE}) {
+            BlockPos p = baseData.get(f);
+            if (p != null) {
+                basePositions.put(f, p);
+                baseZones.put(f, new ControlZone(p.getX(), p.getY(), p.getZ(), Config.BASE_RADIUS.get()));
+                MercenarySandboxShooter.LOGGER.info("MSB 基地恢复: {} 位置({},{},{})", f.name(), p.getX(), p.getY(), p.getZ());
+            }
+        }
+    }
+
+    /** 玩家放置 base_block_* 方块时注册该阵营基地（安全区跟随方块坐标；重复放置覆盖，落盘持久化） */
+    public void registerBase(Faction faction, BlockPos pos) {
+        basePositions.put(faction, pos);
+        baseZones.put(faction, new ControlZone(pos.getX(), pos.getY(), pos.getZ(), Config.BASE_RADIUS.get()));
+        baseData.set(faction, pos);
+        MercenarySandboxShooter.LOGGER.info("MSB 基地方块注册: {} 位置({},{},{}) 安全区半径{}",
+                faction.name(), pos.getX(), pos.getY(), pos.getZ(), Config.BASE_RADIUS.get());
+        broadcastState();
+    }
+
+    /** 方块被拆除 → 移除该阵营基地项并落盘，安全区即时失效（未到该位置不动作） */
+    public void removeBase(Faction faction, BlockPos pos) {
+        if (pos.equals(basePositions.get(faction))) {
+            basePositions.remove(faction);
+            baseZones.remove(faction);
+            baseData.clear(faction);
+            MercenarySandboxShooter.LOGGER.info("MSB 基地方块移除: {} 位置({},{},{})", faction.name(), pos.getX(), pos.getY(), pos.getZ());
+            broadcastState();
+        }
+    }
+
+    /** 方块实例 → 阵营（非基地方块返回 NONE） */
+    public static Faction factionFromBlock(Block block) {
+        if (block == MercenarySandboxShooter.BASE_BLOCK_LONESTAR.get()) {
+            return Faction.LONESTAR;
+        }
+        if (block == MercenarySandboxShooter.BASE_BLOCK_VALKYRA.get()) {
+            return Faction.VALKYRA;
+        }
+        if (block == MercenarySandboxShooter.BASE_BLOCK_MANTICORE.get()) {
+            return Faction.MANTICORE;
+        }
+        return Faction.NONE;
+    }
+
+    public BlockPos getBasePos(Faction faction) {
+        return basePositions.get(faction);
+    }
+
+    /** 安全区判定（平面距离，忽略 Y）——本阵营基地方块范围内为安全区 */
+    public boolean isInBaseZone(Faction faction, BlockPos pos) {
+        ControlZone zone = baseZones.get(faction);
+        return zone != null && zone.containsXZ(pos.getX(), pos.getZ());
     }
 
     public ControlZone getZone() {
         return zone;
     }
 
-    /** 服务端每 tick 驱动：倒计时 + 结算 + 状态广播 + 战术地图单位广播 */
+    /** 服务端每 tick 驱动：倒计时 + 结算 + 状态广播 + 战术地图单位广播 + 基地载具恢复 */
     public void tick() {
         if (zone == null) {
             return;
         }
         tickCounter++;
         unitTickCounter++;
+        baseRegenTick++;
         if (unitTickCounter % UNIT_BROADCAST_TICKS == 0) {
             broadcastUnits();
+        }
+        if (baseRegenTick % (Config.BASE_REGEN_INTERVAL_SECONDS.get() * SECOND_TICKS) == 0) {
+            regenFriendlyVehicles();
         }
         if (tickCounter % SECOND_TICKS == 0) {
             broadcastState();
@@ -102,6 +177,43 @@ public final class MatchManager {
                 countdownTicks = Config.SETTLE_INTERVAL_SECONDS.get() * SECOND_TICKS;
             }
         }
+    }
+
+    /** 安全区载具恢复：对已加载的 SBW 载具，区内且属本方 → heal（docs/02 §5.1） */
+    private void regenFriendlyVehicles() {
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getEntities().getAll()) {
+                if (!isSbwVehicle(entity)) {
+                    continue;
+                }
+                Faction f = vehicleFaction(entity);
+                if (f == Faction.NONE) {
+                    continue;
+                }
+                ControlZone base = baseZones.get(f);
+                if (base == null || !base.containsXZ(entity.blockPosition().getX(), entity.blockPosition().getZ())) {
+                    continue;
+                }
+                if (entity instanceof LivingEntity living) {
+                    living.heal(1.0F);
+                }
+                // TODO: 若 SBW 载具非 LivingEntity（无 heal 接口），恢复延后到载具接入里程碑；本轮已覆盖无敌判定
+            }
+        }
+    }
+
+    /** SBW 载具识别：按实体注册名 namespace 判断（不 import SBW 类，遵守「仅引用 SBW 公开注册名」红线） */
+    public static boolean isSbwVehicle(Entity entity) {
+        return "superbwarfare".equals(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getNamespace());
+    }
+
+    /** 载具阵营：取骑乘玩家阵营；无玩家乘客视为非本方 */
+    private Faction vehicleFaction(Entity entity) {
+        Entity rider = entity.getFirstPassenger();
+        if (rider instanceof ServerPlayer player) {
+            return FactionManager.getPlayerFaction(player);
+        }
+        return Faction.NONE;
     }
 
     /** 记录玩家最近一次受伤 tick（由 LivingDamageEvent.Pre 触发，供交战判定） */
@@ -169,12 +281,25 @@ public final class MatchManager {
     }
 
     public MatchStatePayload buildStatePayload() {
+        int[] basePos = new int[9];
+        Faction[] ordered = {Faction.LONESTAR, Faction.VALKYRA, Faction.MANTICORE};
+        for (int i = 0; i < ordered.length; i++) {
+            BlockPos p = basePositions.get(ordered[i]);
+            if (p != null) {
+                basePos[i * 3] = p.getX();
+                basePos[i * 3 + 1] = p.getZ();
+                basePos[i * 3 + 2] = p.getY();
+            } else {
+                basePos[i * 3] = basePos[i * 3 + 1] = basePos[i * 3 + 2] = -1;
+            }
+        }
         return new MatchStatePayload(
                 zone.getCenterX(), zone.getCenterZ(), zone.getRadius(),
                 Math.max(0, countdownTicks / SECOND_TICKS),
                 scores.getOrDefault(Faction.LONESTAR, 0),
                 scores.getOrDefault(Faction.VALKYRA, 0),
-                scores.getOrDefault(Faction.MANTICORE, 0));
+                scores.getOrDefault(Faction.MANTICORE, 0),
+                basePos);
     }
 
     /** 向所有客户端广播战术地图单位列表（无订阅客户端时跳过，省带宽） */

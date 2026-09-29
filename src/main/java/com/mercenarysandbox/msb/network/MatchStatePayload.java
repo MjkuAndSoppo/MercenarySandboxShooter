@@ -10,12 +10,14 @@ import com.mercenarysandbox.msb.MercenarySandboxShooter;
 import com.mercenarysandbox.msb.client.ClientMatchState;
 
 /**
- * S2C 对局状态载荷（每 2s 广播）：控制区信息 + 三方分数 + 结算倒计时（秒）。
+ * S2C 对局状态载荷（每 2s 广播）：控制区信息 + 三方分数 + 结算倒计时（秒）+
+ * 三阵营基地方块坐标（basePositions，顺序 LONESTAR/VALKYRA/MANTICORE，各 {x,z,y}，未放置=-1 表示不可用）。
  */
 public record MatchStatePayload(
         int zoneCenterX, int zoneCenterZ, int zoneRadius,
         int countdownSeconds,
-        int lonestarScore, int valkyraScore, int manticoreScore) implements CustomPacketPayload {
+        int lonestarScore, int valkyraScore, int manticoreScore,
+        int[] basePositions) implements CustomPacketPayload {
 
     public static final Type<MatchStatePayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(MercenarySandboxShooter.MODID, "match_state"));
@@ -29,10 +31,12 @@ public record MatchStatePayload(
                 buf.writeVarInt(p.lonestarScore());
                 buf.writeVarInt(p.valkyraScore());
                 buf.writeVarInt(p.manticoreScore());
+                buf.writeVarIntArray(p.basePositions());
             },
             buf -> new MatchStatePayload(
                     buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
-                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt()));
+                    buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(),
+                    buf.readVarIntArray()));
 
     @Override
     public Type<? extends CustomPacketPayload> type() {

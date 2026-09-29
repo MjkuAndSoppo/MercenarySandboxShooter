@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.math.Axis;
+import org.lwjgl.glfw.GLFW;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -16,10 +17,12 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import com.mercenarysandbox.msb.Config;
 import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.network.MatchStatePayload;
+import com.mercenarysandbox.msb.network.TeleportRequestPayload;
 import com.mercenarysandbox.msb.network.UnitPositionsPayload;
 
 /**
@@ -115,6 +118,9 @@ public final class TacticalMapScreen extends Screen {
     private boolean draggingSlider;
     private double lastMouseX;
     private double lastMouseY;
+    /** 当前指针屏幕坐标（render 每帧更新，供 T 键传送取光标世界坐标） */
+    private double cursorX;
+    private double cursorY;
 
     // 渲染期缓存的旋转参数（随视角刷新）
     private boolean rotate;
@@ -126,9 +132,31 @@ public final class TacticalMapScreen extends Screen {
     }
 
     @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_T) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null) {
+                if (mc.player.getAbilities().instabuild) {
+                    // 光标处世界坐标 → 服务端求该柱最高方块并传送（服务端权威）
+                    double scale = currentScale();
+                    double wx = camX + worldDx(cursorX - width / 2.0D, cursorY - height / 2.0D, scale);
+                    double wz = camZ + worldDz(cursorX - width / 2.0D, cursorY - height / 2.0D, scale);
+                    PacketDistributor.sendToServer(new TeleportRequestPayload((int) Math.floor(wx), (int) Math.floor(wz)));
+                } else {
+                    mc.player.displayClientMessage(Component.translatable("msb.tactical_map.tp.creative_only"), true);
+                }
+            }
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         super.render(g, mouseX, mouseY, partialTick);
         Minecraft mc = Minecraft.getInstance();
+        cursorX = mouseX;
+        cursorY = mouseY;
         UnitPositionsPayload units = ClientMatchState.getUnitPositions();
         MatchStatePayload state = ClientMatchState.getMatchState();
 
@@ -168,6 +196,7 @@ public final class TacticalMapScreen extends Screen {
             drawRing(g, cx, cy, scale, units.mapCenterX(), units.mapCenterZ(), state.zoneRadius(), COLOR_ZONE);
         }
         drawSpawn(g, cx, cy, scale, units.mapCenterX(), units.mapCenterZ());
+        drawBases(g, cx, cy, scale, state);
 
         // 单位点 + 标注 + 悬停检测
         int hoverIndex = -1;
@@ -257,20 +286,42 @@ public final class TacticalMapScreen extends Screen {
         g.drawCenteredString(font, label, x0 + BTN_W / 2, y0 + (BTN_H - font.lineHeight) / 2 + 1, 0xFFFFFF);
     }
 
+    /** 三阵营基地方块标记（docs/02 §5.1）：阵营色方块点 + B 字母；坐标来自 state.basePositions（{x,z,y}×3，-1=未放置） */
+    private void drawBases(GuiGraphics g, int cx, int cy, double scale, MatchStatePayload state) {
+        if (state == null || state.basePositions() == null) {
+            return;
+        }
+        int[] pos = state.basePositions();
+        int[] colors = {0xFF5555, 0x55AFFF, 0x55FF55}; // LONESTAR / VALKYRA / MANTICORE
+        for (int i = 0; i < 3; i++) {
+            if (pos[i * 3] == -1) {
+                continue;
+            }
+            int px = sx(cx, scale, pos[i * 3], pos[i * 3 + 1]);
+            int pz = sy(cy, scale, pos[i * 3], pos[i * 3 + 1]);
+            if (px < -24 || px > width + 24 || pz < -24 || pz > height + 24) {
+                continue; // 屏外
+            }
+            g.fill(px - 3, pz - 3, px + 3, pz + 3, colors[i]);
+            g.drawString(font, "B", px + 4, pz - 5, colors[i]);
+        }
+    }
+
     /** 图例（左上角） */
     private void drawLegend(GuiGraphics g) {
         int x0 = 8;
         int y0 = TOP_BAR_H + 10;
         int w = 150;
-        int h = 7 * 12 + 4;
+        int h = 8 * 12 + 4;
         g.fill(x0 - 3, y0 - 3, x0 + w, y0 + h, COLOR_LEGEND_BG);
         drawLegendLine(g, x0, y0, COLOR_SPAWN, "msb.tactical_map.legend.spawn");
         drawLegendLine(g, x0, y0 + 12, COLOR_ZONE, "msb.tactical_map.legend.zone");
         drawLegendLine(g, x0, y0 + 24, COLOR_BORDER, "msb.tactical_map.legend.boundary");
-        drawLegendLine(g, x0, y0 + 36, COLOR_FRIENDLY, "msb.tactical_map.legend.friendly");
-        drawLegendLine(g, x0, y0 + 48, COLOR_ENEMY, "msb.tactical_map.legend.enemy");
-        drawLegendLine(g, x0, y0 + 60, COLOR_NEUTRAL, "msb.tactical_map.legend.neutral");
-        drawLegendLine(g, x0, y0 + 72, COLOR_SELF, "msb.tactical_map.legend.self");
+        drawLegendLine(g, x0, y0 + 36, 0xFF5555, "msb.tactical_map.legend.base");
+        drawLegendLine(g, x0, y0 + 48, COLOR_FRIENDLY, "msb.tactical_map.legend.friendly");
+        drawLegendLine(g, x0, y0 + 60, COLOR_ENEMY, "msb.tactical_map.legend.enemy");
+        drawLegendLine(g, x0, y0 + 72, COLOR_NEUTRAL, "msb.tactical_map.legend.neutral");
+        drawLegendLine(g, x0, y0 + 84, COLOR_SELF, "msb.tactical_map.legend.self");
     }
 
     private void drawLegendLine(GuiGraphics g, int x, int y, int color, String key) {

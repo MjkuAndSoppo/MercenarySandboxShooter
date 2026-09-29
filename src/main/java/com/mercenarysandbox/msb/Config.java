@@ -39,6 +39,15 @@ public class Config {
             .comment("Target combat units per faction (real players + AI). AI count = target - real players")
             .defineInRange("aiTargetPerFaction", 10, 1, 100);
 
+    // ===== 阵营基地方块（docs/02 §5.1）=====
+    public static final ModConfigSpec.IntValue BASE_RADIUS = BUILDER
+            .comment("Base safe zone radius in blocks (center = base block position)")
+            .defineInRange("baseRadius", 16, 5, 100);
+
+    public static final ModConfigSpec.IntValue BASE_REGEN_INTERVAL_SECONDS = BUILDER
+            .comment("Friendly vehicle health regen interval in seconds while inside base safe zone")
+            .defineInRange("baseRegenIntervalSeconds", 2, 1, 30);
+
     // ===== 战术地图（docs/02 §3.9）=====
     public static final ModConfigSpec.BooleanValue TACTICAL_MAP_ROTATE_WITH_PLAYER = BUILDER
             .comment("Rotate the tactical map with the player's facing direction. Disable for a fixed north-up map")

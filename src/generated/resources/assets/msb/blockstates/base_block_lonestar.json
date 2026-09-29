@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "msb:block/base_block_lonestar"
+    }
+  }
+}

@@ -35,6 +35,8 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
+import com.mercenarysandbox.msb.block.BaseBlock;
+
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(MercenarySandboxShooter.MODID)
 public class MercenarySandboxShooter {
@@ -52,6 +54,17 @@ public class MercenarySandboxShooter {
     // M0 注册链路验证：方块 / 物品 / 创造模式标签（后续里程碑会替换为真实玩法内容）
     public static final DeferredBlock<Block> TEST_BLOCK = BLOCKS.registerSimpleBlock("test_block", BlockBehaviour.Properties.of().mapColor(MapColor.STONE));
     public static final DeferredItem<BlockItem> TEST_BLOCK_ITEM = ITEMS.registerSimpleBlockItem("test_block", TEST_BLOCK);
+
+    // ===== 阵营基地方块（docs/02 §5.1）：三阵营各一实例，安全区中心跟随方块位置 =====
+    public static final DeferredBlock<BaseBlock> BASE_BLOCK_LONESTAR = BLOCKS.register("base_block_lonestar",
+            () -> new BaseBlock(BlockBehaviour.Properties.of().mapColor(MapColor.FIRE).strength(50.0F).requiresCorrectToolForDrops()));
+    public static final DeferredBlock<BaseBlock> BASE_BLOCK_VALKYRA = BLOCKS.register("base_block_valkyra",
+            () -> new BaseBlock(BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(50.0F).requiresCorrectToolForDrops()));
+    public static final DeferredBlock<BaseBlock> BASE_BLOCK_MANTICORE = BLOCKS.register("base_block_manticore",
+            () -> new BaseBlock(BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_GREEN).strength(50.0F).requiresCorrectToolForDrops()));
+    public static final DeferredItem<BlockItem> BASE_BLOCK_LONESTAR_ITEM = ITEMS.registerSimpleBlockItem("base_block_lonestar", BASE_BLOCK_LONESTAR);
+    public static final DeferredItem<BlockItem> BASE_BLOCK_VALKYRA_ITEM = ITEMS.registerSimpleBlockItem("base_block_valkyra", BASE_BLOCK_VALKYRA);
+    public static final DeferredItem<BlockItem> BASE_BLOCK_MANTICORE_ITEM = ITEMS.registerSimpleBlockItem("base_block_manticore", BASE_BLOCK_MANTICORE);
 
     public static final DeferredItem<Item> TEST_ITEM = ITEMS.registerSimpleItem("test_item", new Item.Properties().food(new FoodProperties.Builder()
             .alwaysEdible().nutrition(1).saturationModifier(2f).build()));
@@ -86,6 +99,9 @@ public class MercenarySandboxShooter {
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.BUILDING_BLOCKS) {
             event.accept(TEST_BLOCK_ITEM);
+            event.accept(BASE_BLOCK_LONESTAR_ITEM);
+            event.accept(BASE_BLOCK_VALKYRA_ITEM);
+            event.accept(BASE_BLOCK_MANTICORE_ITEM);
         }
     }
 
