@@ -11,16 +11,23 @@ public final class ClientMatchState {
     private static MatchStatePayload matchState;
     private static UnitPositionsPayload unitPositions;
     private static int ownFactionId = -1;
-    /** 本人钱包（HUD 财产显示）：花销 / 总资产，S2C WalletPayload 更新 */
+    /** 本人钱包（HUD 财产显示）：本条命收入 / 花销 / 总资产，S2C WalletPayload 更新 */
+    private static int walletEarned;
     private static int walletSpent;
     private static int walletTotal;
 
     private ClientMatchState() {
     }
 
-    public static void setWallet(int spent, int total) {
+    public static void setWallet(int earned, int spent, int total) {
+        walletEarned = earned;
         walletSpent = spent;
         walletTotal = total;
+    }
+
+    /** 本条命赚到的钱（HUD 左侧显示） */
+    public static int getWalletEarned() {
+        return walletEarned;
     }
 
     public static int getWalletSpent() {

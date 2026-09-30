@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSB 配装商店 · 购买窗口原型（M2 · v2 储存格改版）</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 场景背景（模拟游戏内压暗的战场世界；窗口浮于其上） -->
+<div class="scene"></div>
+<div class="scene-vignette"></div>
+
+<!-- 原型演示条（窗口外，不属于设计本体） -->
+<div class="proto-bar">
+  <span class="proto-label">原型演示</span>
+  <button class="chip active" data-demo="normal">默认</button>
+  <button class="chip" data-demo="poor">余额不足</button>
+  <button class="chip" data-demo="emptyBag">清空库存</button>
+  <button class="chip" id="annotateBtn">显示 GUI 标注</button>
+  <button class="chip" id="toggleWinBtn">关闭窗口 (B)</button>
+</div>
+
+<!-- ============ 购买窗口（940×520 px = 470×260 GUI） ============ -->
+<div class="shop-window" id="shopWindow">
+
+  <header class="win-header" data-anno="顶栏 470×22">
+    <div class="win-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+      军火商店 <span class="en">ARMORY</span>
+    </div>
+    <div class="win-balance">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+      <span class="mono" id="balanceText">$0</span>
+    </div>
+  </header>
+
+  <div class="win-body">
+    <!-- 分类栏 -->
+    <aside class="cat-col" id="catCol" data-anno="分类栏 72×212"></aside>
+
+    <!-- 中间栏：上=商品滚动格；下=购买/出售面板 + 储存格 -->
+    <section class="mid-col">
+      <div class="box market-box" data-anno="商品滚动格 212×112">
+        <div class="box-head">
+          <span id="marketHead">载入目录</span>
+          <span class="mono dim">6 列滚动</span>
+        </div>
+        <div class="cat-view" id="catView"><div class="cat-grid" id="catGrid"></div></div>
+      </div>
+      <div class="lower-box">
+        <aside class="panel-col" id="panelCol" data-anno="购买/出售面板 97×96"></aside>
+        <section class="box sto-col" data-anno="储存格 101×96">
+          <div class="box-head">
+            <span>储存格 <b class="mono" id="stoCount">0/60</b></span>
+            <span class="legend"><i class="lg-frame"></i>绿框 = 可无损卖回</span>
+          </div>
+          <div class="sto-view" id="stoView"><div class="sto-grid" id="stoGrid"></div></div>
+        </section>
+      </div>
+    </section>
+
+    <!-- 右侧：玩家背包映射（装备栏 + 饰品栏 + 物品栏 + 快捷栏） -->
+    <aside class="bag-col" data-anno="玩家背包 168×212">
+      <div class="bag-group">
+        <div class="grp-head"><span>装备栏</span><span class="dim">护甲 / 主副手</span></div>
+        <div class="slot-grid g3" id="equipGrid"></div>
+      </div>
+      <div class="bag-group">
+        <div class="grp-head"><span>饰品栏</span><span class="dim">P1 开放（Curios）</span></div>
+        <div class="slot-grid g3" id="accGrid"></div>
+      </div>
+      <div class="bag-group">
+        <div class="grp-head"><span>物品栏</span><b class="mono dim" id="mainCount">0/27</b></div>
+        <div class="slot-grid g9" id="mainGrid"></div>
+      </div>
+      <div class="bag-group">
+        <div class="grp-head"><span>快捷栏</span><span class="dim">按住数字键使用</span></div>
+        <div class="slot-grid g9" id="hotbarGrid"></div>
+      </div>
+      <div class="bag-note">物品从储存格取出即失去绿框；玩家物品存入储存格不会获得绿框。饰品栏 P1（Curios）开放后启用。</div>
+    </aside>
+  </div>
+
+  <footer class="win-footer" data-anno="底栏 470×20">
+    <span id="ftHint">点击商品选中 · 双击快速购买 · 点击储存格 / 背包物品可出售 · ESC 关闭</span>
+    <div class="ft-weight" id="ftWeight">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><path d="M6.5 8a2 2 0 0 0-1.905 1.46L2.1 18.5A2 2 0 0 0 4 21h16a2 2 0 0 0 1.925-2.54L19.4 9.5A2 2 0 0 0 17.48 8Z"/></svg>
+      <span id="weightText">0 / 24.0 kg</span>
+      <i class="wm"><b id="weightBar"></b></i>
+    </div>
+  </footer>
+
+  <!-- 确认弹窗（窗口内） -->
+  <div class="dialog-layer" id="dialogLayer"></div>
+  <!-- Toast（窗口内右下） -->
+  <div class="toast-wrap" id="toastWrap"></div>
+</div>
+
+<!-- 关闭态提示 -->
+<div class="closed-hint" id="closedHint">
+  <span>商店窗口已关闭（游戏内按 <b class="mono">B</b> 重新打开）</span>
+  <button class="btn-ghost" id="reopenBtn">重新打开商店</button>
+  <span class="mono">实现对应：MsbKeyMappings「key.msb.shop」· ShopScreen</span>
+</div>
+
+<!-- MC 物品 tooltip -->
+<div class="mc-tooltip" id="tooltip"></div>
+
+<!-- 原型说明（窗口外） -->
+<p class="proto-note">
+  原型说明：窗口像素 = 游戏内 GUI 单位 × 2（940×520 px = 470×260 GUI）·
+  商品滚动格 6 列 / 储存格 5 列（60 格，可滚动）· 绿框 = 购买后未取出的件数（可无损卖回 100%）·
+  物品图标为 16×16 示意图，实现时替换为 SBW 物品贴图 · 对应实现 ShopScreen（GuiGraphics 自绘）
+</p>
+
+<script src="icons.js"></script>
+<script src="mock.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

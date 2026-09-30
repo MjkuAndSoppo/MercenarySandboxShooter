@@ -14,10 +14,14 @@ public final class WalletAttachments {
     public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES =
             DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, MercenarySandboxShooter.MODID);
 
-    /** 玩家钱包（M1 起用于 HUD 财产显示；M2 现金系统读写此附件） */
+    /** 玩家钱包（M1 起用于 HUD 财产显示；M2 现金系统读写此附件）
+     *  copyOnDeath：现金与花销跨死亡保留（PRD §8「现金永不丢失」），本命收入由死亡结算显式清零 */
     public static final DeferredHolder<AttachmentType<?>, AttachmentType<PlayerWallet>> WALLET =
             ATTACHMENT_TYPES.register("wallet",
-                    () -> AttachmentType.builder(() -> PlayerWallet.DEFAULT).serialize(PlayerWallet.CODEC).build());
+                    () -> AttachmentType.builder(() -> PlayerWallet.DEFAULT)
+                            .serialize(PlayerWallet.CODEC)
+                            .copyOnDeath()
+                            .build());
 
     private WalletAttachments() {
     }

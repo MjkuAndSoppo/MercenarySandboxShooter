@@ -20,9 +20,14 @@ public final class MsbKeyMappings {
     public static final KeyMapping TACTICAL_MAP_KEY = new KeyMapping(
             "key.msb.tactical_map", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, "key.categories.msb");
 
+    /** 军火商店开关（B 键，docs/02 §3.4） */
+    public static final KeyMapping SHOP_KEY = new KeyMapping(
+            "key.msb.shop", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_B, "key.categories.msb");
+
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(TACTICAL_MAP_KEY);
+        event.register(SHOP_KEY);
     }
 
     private MsbKeyMappings() {

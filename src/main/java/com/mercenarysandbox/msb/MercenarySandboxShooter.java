@@ -100,6 +100,10 @@ public class MercenarySandboxShooter {
         FactionAttachments.ATTACHMENT_TYPES.register(modEventBus);
         WalletAttachments.ATTACHMENT_TYPES.register(modEventBus);
         com.mercenarysandbox.msb.match.KillStreakAttachments.ATTACHMENT_TYPES.register(modEventBus);
+        // 配装商店：个人储存格附体（序列化 + copyOnDeath，跨死亡/重连保持）
+        com.mercenarysandbox.msb.shop.ShopStorageAttachments.ATTACHMENT_TYPES.register(modEventBus);
+        // 荣誉点（独立货币，荣誉商店用）
+        com.mercenarysandbox.msb.economy.HonorAttachments.ATTACHMENT_TYPES.register(modEventBus);
 
         NeoForge.EVENT_BUS.register(this);
 

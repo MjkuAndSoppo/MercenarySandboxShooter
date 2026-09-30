@@ -1,0 +1,8 @@
+{
+  "entries": [
+    { "item": "superbwarfare:handgun_ammo_box", "price": 70, "weight": 0.1 },
+    { "item": "superbwarfare:rifle_ammo_box", "price": 95, "weight": 0.1 },
+    { "item": "superbwarfare:shotgun_ammo_box", "price": 85, "weight": 0.1 },
+    { "item": "superbwarfare:sniper_ammo_box", "price": 150, "weight": 0.1 }
+  ]
+}

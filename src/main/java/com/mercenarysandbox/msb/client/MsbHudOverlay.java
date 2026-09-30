@@ -1,5 +1,7 @@
 package com.mercenarysandbox.msb.client;
 
+import java.util.Locale;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -53,10 +55,21 @@ public final class MsbHudOverlay {
         x = drawSegment(g, font, x, va, rgb(Faction.VALKYRA));
         drawSegment(g, font, x, mt, rgb(Faction.MANTICORE));
 
-        // 右侧财产：当前花销$ | 总资产$（右对齐，y 贴靠上边缘）
-        Component wallet = Component.literal(ClientMatchState.getWalletSpent() + "$ | "
+        // 右侧财产：本条命赚的钱$ | 总资产$（右对齐，y 贴靠上边缘）
+        Component wallet = Component.literal(ClientMatchState.getWalletEarned() + "$ | "
                 + ClientMatchState.getWalletTotal() + "$");
         g.drawString(font, wallet, screenWidth - 6 - font.width(wallet), TEXT_Y, 0xFFFFFF);
+
+        // 资产左侧：负重（随身目录物品，≥60% 琥珀、≥100% 红；docs/02 §3.4 负重系统）
+        double weight = ClientShopData.playerWeight(player);
+        double limit = ClientShopData.weightLimit();
+        double ratio = limit <= 0.0D ? 0.0D : weight / limit;
+        int weightColor = ratio >= 1.0D ? 0xFF5A4D
+                : ratio >= ClientShopData.weightWarnRatio() ? 0xF2B13C : 0xFFFFFF;
+        Component weightText = Component.translatable("msb.hud.weight",
+                String.format(Locale.ROOT, "%.1f", weight), String.format(Locale.ROOT, "%.1f", limit));
+        int walletX = screenWidth - 6 - font.width(wallet);
+        g.drawString(font, weightText, walletX - 8 - font.width(weightText), TEXT_Y, weightColor);
     }
 
     /** 绘制一段文本并返回下一个绘制 x（用于分段着色，y 贴靠上边缘） */

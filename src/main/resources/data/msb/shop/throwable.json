@@ -1,0 +1,8 @@
+{
+  "entries": [
+    { "item": "superbwarfare:m18_smoke_grenade", "price": 120, "weight": 0.5 },
+    { "item": "superbwarfare:hand_grenade", "price": 150, "weight": 0.45 },
+    { "item": "superbwarfare:rgo_grenade", "price": 180, "weight": 0.5 },
+    { "item": "superbwarfare:c4_bomb", "price": 450, "weight": 1.2 }
+  ]
+}

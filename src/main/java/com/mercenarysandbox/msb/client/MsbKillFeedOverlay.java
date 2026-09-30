@@ -57,6 +57,12 @@ public final class MsbKillFeedOverlay {
         Component name = show.isPlayer()
                 ? Component.literal(show.targetKey())
                 : Component.translatable(show.targetKey());
+        // 同阵营 AI 友伤：仅显示一行「友伤 <名称> -xx$」，不显示分隔线与击杀/经验行
+        if (show.friendlyFire()) {
+            Component friendly = Component.translatable("msb.kill_feed.friendly_fire", name, money);
+            g.drawCenteredString(font, friendly, cx, cy, 0xFFFFFF);
+            return;
+        }
         Component line1 = Component.translatable("msb.kill_feed.annihilate", name, money);
         Component line2 = Component.literal("——————————");
         Component line3 = Component.translatable("msb.kill_feed.info", streak, xp);

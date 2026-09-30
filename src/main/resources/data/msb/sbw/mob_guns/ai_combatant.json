@@ -11,7 +11,7 @@
     "SpawnWithLoadedAmmo": true,
     "ShootDistance": 30,
     "Zoom": true,
-    "Spread": 1,
+    "Spread": 8,
     "Data": {
       "GunData": {
         "VirtualAmmo": 512,

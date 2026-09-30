@@ -1,5 +1,7 @@
 package com.mercenarysandbox.msb.entity;
 
+import java.util.List;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -22,6 +24,8 @@ import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
@@ -30,9 +34,10 @@ import net.minecraft.world.level.Level;
 import com.atsuishio.superbwarfare.data.gun.GunData;
 import com.atsuishio.superbwarfare.data.gun.GunProp;
 import com.atsuishio.superbwarfare.data.mob_guns.MobGunData;
-import com.atsuishio.superbwarfare.entity.goal.GunShootGoal;
 import com.atsuishio.superbwarfare.item.gun.GunItem;
-import com.mercenarysandbox.msb.MercenarySandboxShooter;
+import com.mercenarysandbox.msb.Config;
+
+import com.mercenarysandbox.msb.ai.AiGunShootGoal;
 import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.faction.FactionManager;
 
@@ -40,14 +45,17 @@ import com.mercenarysandbox.msb.faction.FactionManager;
  * AI 战斗单位实体（M1 实体化，docs/02 §3.12；M2 战斗逻辑）。
  * 原版 Steve 外观（PlayerModel + 阵营 PMC 皮肤，slim 细臂），主手装配 SBW 枪械，
  * 服务端目标驱动：发现敌方（真人玩家 + 敌方 AI）→ GunShootGoal 瞄准开火（SBW 抛射物）。
- * 每个 AI 携带独立战利品容器（武器/弹药），死亡后随尸体掉落供玩家搜刮。
+ * 每个 AI 携带双容器：装备容器（初始武器/弹药，掉落受 /MSBS AIpmc drop 控制）
+ * 与战利品容器（主动拾取的掉落物，死亡始终掉落供玩家搜刮）。
  * 阵营以 SynchedEntityData 同步（渲染器按阵营切换皮肤）+ NBT 持久化（服务端跨存档）。
  */
 public class AiCombatantEntity extends PathfinderMob implements Container {
     /** 阵营同步键：普通字段不跨客户端同步（渲染器按阵营切皮肤），用实体数据流 */
     private static final EntityDataAccessor<Integer> DATA_FACTION_ID = SynchedEntityData.defineId(AiCombatantEntity.class, EntityDataSerializers.INT);
-    /** 战利品容器容量：0=副武器（带弹）、1=手枪弹、2=步枪弹、3+=杂项（死亡掉落供玩家搜刮） */
-    private static final int LOOT_SLOTS = 9;
+    /** 交战瞄准同步键：客户端渲染抬枪姿势（服务端战斗 goal 运行时置位） */
+    private static final EntityDataAccessor<Boolean> DATA_AIMING = SynchedEntityData.defineId(AiCombatantEntity.class, EntityDataSerializers.BOOLEAN);
+    /** AI 双容器容量：装备容器（初始武器/弹药，掉落受 /MSBS AIpmc drop 控制）与战利品容器（拾取物，始终掉落） */
+    private static final int CONTAINER_SIZE = 27;
     /** 枪内虚拟弹药（SBW mob 射击用：非玩家实体无物品栏，靠枪 NBT 供弹，docs/02 §3.12） */
     private static final int VIRTUAL_AMMO = 512;
     /** 敌方阵营枪械预设（映射 SBW 公开注册名，仅引用不复制代码；阵营轮换预设留待预设表） */
@@ -59,10 +67,19 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     /** 容器内弹药物品（SBW 弹药物品注册名，与枪械 AmmoType 对应：手枪=glock_17、步枪=三队主武器） */
     private static final String AMMO_ID_HANDGUN = "superbwarfare:handgun_ammo";
     private static final String AMMO_ID_RIFLE = "superbwarfare:rifle_ammo";
+    /** 受击后通知反击的队友半径（格） */
+    private static final double ALLY_ALERT_RADIUS = 8.0D;
+    /** 非交战状态主动拾取的掉落物扫描半径（格） */
+    private static final double PICKUP_RADIUS = 5.0D;
+    /** 走到掉落物该距离（格）内即收取 */
+    private static final double PICKUP_STOP_DISTANCE = 1.5D;
 
-    private final SimpleContainer loot = new SimpleContainer(LOOT_SLOTS);
-    /** 临时探针计数器（排障后删）：避开 gameTime 门控的相位偏移假阴性 */
-    private int probeCounter;
+    /** 装备容器：初始副武器 + 弹药（掉落受 /MSBS AIpmc drop 控制） */
+    private final SimpleContainer equipment = new SimpleContainer(CONTAINER_SIZE);
+    /** 战利品容器：拾取的掉落物（死亡始终掉落，与装备掉落开关无关） */
+    private final SimpleContainer loot = new SimpleContainer(CONTAINER_SIZE);
+    /** 圈内巡逻换点倒计时（lazyTick 调用次数；每 4 tick 一次调用，60 ≈ 12s） */
+    private int patrolCooldown;
 
     public AiCombatantEntity(EntityType<? extends AiCombatantEntity> type, Level level) {
         super(type, level);
@@ -73,19 +90,23 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
         }
     }
 
-    /** 服务端战斗 goal：目标选择（敌方真人 + 敌方 AI）+ SBW 枪械射击（mob_guns 数据缺失时退化为只索敌不开火） */
+    /** 服务端战斗 goal：目标选择（敌方真人 + 敌方 AI）+ 自研分档射击（mob_guns 数据缺失时退化为只索敌不开火） */
     private void registerCombatGoals() {
         this.targetSelector.addGoal(1, new NearestAttackableTargetGoal<>(this, LivingEntity.class, true, this::isEnemy));
         MobGunData gunData = MobGunData.from(this);
         if (gunData != null) {
-            this.goalSelector.addGoal(1, new GunShootGoal<>(this, gunData));
+            this.goalSelector.addGoal(1, new AiGunShootGoal(this, gunData));
         }
     }
 
-    /** 敌我识别（服务端权威，docs/02 §3.1）：仅敌方阵营真人玩家与敌方 AI 为目标；未分配（NONE）不算敌人 */
+    /** 敌我识别（服务端权威，docs/02 §3.1）：敌方阵营真人玩家、敌方 AI、非中立生物（敌对怪物）为目标 */
     private boolean isEnemy(LivingEntity target) {
         if (target == this || target.isDeadOrDying()) {
             return false;
+        }
+        // 非中立生物（僵尸/骷髅/灾厄等 Enemy 接口实现）一律主动攻击
+        if (target instanceof Enemy) {
+            return true;
         }
         if (target instanceof AiCombatantEntity ai) {
             Faction f = ai.getFaction();
@@ -102,6 +123,16 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
         builder.define(DATA_FACTION_ID, Faction.NONE.getId());
+        builder.define(DATA_AIMING, false);
+    }
+
+    /** 是否处于交战瞄准状态（渲染抬枪姿势用；服务端写入、客户端读取） */
+    public boolean isAiming() {
+        return this.entityData.get(DATA_AIMING);
+    }
+
+    public void setAiming(boolean aiming) {
+        this.entityData.set(DATA_AIMING, aiming);
     }
 
     public Faction getFaction() {
@@ -130,7 +161,7 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
 
     /**
      * 出生装配（AiManager.spawnUnit 调用）：主手 SBW 枪械 + 枪内虚拟弹药（mob 射击供弹），
-     * 战利品容器放副武器（带弹）+ 弹药，死亡掉落供玩家搜刮（主武器只在主手、避免重复掉落）。
+     * 装备容器放副武器（带弹）+ 弹药（掉落受 /MSBS AIpmc drop 控制；主武器只在主手、避免重复掉落）。
      */
     public void equipLoadout() {
         String gunId = switch (getFaction()) {
@@ -140,23 +171,9 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
             default -> GUN_ID_FALLBACK;
         };
         setItemInHand(InteractionHand.MAIN_HAND, createGun(gunId));
-        loot.setItem(0, createGun(GUN_ID_SIDEARM));
-        loot.setItem(1, createAmmo(AMMO_ID_HANDGUN, 32));
-        loot.setItem(2, createAmmo(AMMO_ID_RIFLE, 64));
-        // 临时探针：验证战斗链路（mob_guns 数据注册 + 主手枪弹药写入），排障后删除
-        ItemStack main = getMainHandItem();
-        if (main.getItem() instanceof GunItem) {
-            try {
-                GunData mainData = GunData.from(main);
-                MercenarySandboxShooter.LOGGER.info(
-                        "MSB AI equip: faction={} mobGunData={} main={} virtualAmmo={} ammo={}",
-                        getFaction(), MobGunData.from(this) != null,
-                        BuiltInRegistries.ITEM.getKey(main.getItem()),
-                        mainData.virtualAmmo.get(), mainData.ammo.get());
-            } catch (Exception e) {
-                MercenarySandboxShooter.LOGGER.warn("MSB AI equip probe failed: {}", e.toString());
-            }
-        }
+        equipment.setItem(0, createGun(GUN_ID_SIDEARM));
+        equipment.setItem(1, createAmmo(AMMO_ID_HANDGUN, 32));
+        equipment.setItem(2, createAmmo(AMMO_ID_RIFLE, 64));
     }
 
     /** 生成一叠弹药物品（SBW AmmoSupplierItem，玩家搜刮后可直接装填） */
@@ -192,66 +209,126 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
      * 无攻击目标 → 圈外朝圆心移动、圈内停止；有目标 → 交给战斗 goal（GunShootGoal 负责逼近/开火）。
      */
     public void lazyTick(BlockPos zoneCenter, int radius) {
-        // 临时探针（排障后删）：有目标时每 20 次 lazyTick（约 4s）打印交战链路关键值
-        probeCounter++;
-        LivingEntity probeTarget = getTarget();
-        if (probeTarget != null && probeCounter % 20 == 0) {
-            try {
-                ItemStack mh = getMainHandItem();
-                GunData md = mh.getItem() instanceof GunItem ? GunData.from(mh) : null;
-                CustomData cdData = mh.get(DataComponents.CUSTOM_DATA);
-                CompoundTag cd = cdData == null ? null : cdData.copyTag();
-                int nbtVA = cd == null ? -1 : cd.getCompound("GunData").getInt("VirtualAmmo");
-                int nbtAmmo = cd == null ? -1 : cd.getCompound("GunData").getInt("Ammo");
-                MobGunData mgd = MobGunData.from(this);
-                GunData jg = mgd == null ? null : mgd.getGunData();
-                MercenarySandboxShooter.LOGGER.info(
-                        "MSB AI probe: name={} target={} los={} dist={} jsonVA={} mdAmmo={} mdVA={} nbtVA={} nbtAmmo={} canShoot={}",
-                        getCustomName() == null ? getStringUUID() : getCustomName().getString(),
-                        probeTarget.getName().getString(),
-                        getSensing().hasLineOfSight(probeTarget),
-                        (int) Math.sqrt(distanceToSqr(probeTarget)),
-                        jg == null ? -1 : jg.virtualAmmo.get(),
-                        md == null ? -1 : md.ammo.get(),
-                        md == null ? -1 : md.virtualAmmo.get(),
-                        nbtVA, nbtAmmo,
-                        md != null && md.canShoot(this));
-            } catch (Exception e) {
-                MercenarySandboxShooter.LOGGER.warn("MSB AI probe failed: {}", e.toString());
-            }
-        } else if (probeTarget == null && probeCounter % 200 == 0) {
-            MercenarySandboxShooter.LOGGER.info("MSB AI probe: name={} target=none",
-                    getCustomName() == null ? getStringUUID() : getCustomName().getString());
-        }
         if (isRemoved() || isDeadOrDying() || getTarget() != null) {
+            return;
+        }
+        // 非交战：扫描 5 格内掉落物并主动走过去拾取（优先于巡逻/推进）
+        if (chaseAndPickUpLoot()) {
             return;
         }
         double dx = zoneCenter.getX() + 0.5D - getX();
         double dz = zoneCenter.getZ() + 0.5D - getZ();
         boolean inZone = dx * dx + dz * dz <= (double) radius * radius;
-        if (inZone) {
-            getNavigation().stop();
-        } else {
+        if (!inZone) {
+            // 圈外：朝控制区推进
             getNavigation().moveTo(zoneCenter.getX() + 0.5D, zoneCenter.getY(), zoneCenter.getZ() + 0.5D, 0.8D);
+            return;
+        }
+        // 圈内自由巡逻：到达当前目标点后隔一段时间随机换一个圈内点漫游
+        if (!getNavigation().isDone()) {
+            return;
+        }
+        if (patrolCooldown > 0) {
+            patrolCooldown--;
+            return;
+        }
+        patrolCooldown = 60 + getRandom().nextInt(60);
+        double angle = getRandom().nextDouble() * Math.PI * 2.0D;
+        double dist = getRandom().nextDouble() * radius * 0.8D;
+        double tx = zoneCenter.getX() + 0.5D + Math.cos(angle) * dist;
+        double tz = zoneCenter.getZ() + 0.5D + Math.sin(angle) * dist;
+        getNavigation().moveTo(tx, zoneCenter.getY(), tz, 0.6D);
+    }
+
+    /**
+     * 非交战状态：扫描 5 格内掉落物并主动移动过去拾取（走到物品旁即收进战利品区）。
+     * @return true 表示正在处理掉落物（本次不巡逻/不推进）
+     */
+    private boolean chaseAndPickUpLoot() {
+        if (level().isClientSide) {
+            return false;
+        }
+        List<ItemEntity> items = level().getEntitiesOfClass(ItemEntity.class, getBoundingBox().inflate(PICKUP_RADIUS));
+        ItemEntity nearest = null;
+        double best = Double.MAX_VALUE;
+        for (ItemEntity item : items) {
+            if (item.isRemoved() || item.hasPickUpDelay() || item.getItem().isEmpty()) {
+                continue;
+            }
+            double d = distanceToSqr(item);
+            if (d < best) {
+                best = d;
+                nearest = item;
+            }
+        }
+        if (nearest == null) {
+            return false;
+        }
+        if (best > PICKUP_STOP_DISTANCE * PICKUP_STOP_DISTANCE) {
+            // 主动移动到掉落物旁
+            getNavigation().moveTo(nearest, 1.0D);
+        } else {
+            // 已到物品旁：收进战利品容器（27 格全部可用）
+            ItemStack remaining = loot.addItem(nearest.getItem().copy());
+            if (remaining.isEmpty()) {
+                nearest.discard();
+            } else {
+                nearest.setItem(remaining);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 被攻击后反击（服务端伤害事件调用）：立刻锁定攻击者，并通知半径 8 格内同阵营 AI 队友一起索敌。
+     * 同阵营误伤不触发（isEnemy 已排除同阵营）。
+     */
+    public void retaliate(LivingEntity attacker) {
+        if (level().isClientSide || !isEnemy(attacker)) {
+            return;
+        }
+        setLastHurtByMob(attacker);
+        if (getTarget() == null) {
+            setTarget(attacker);
+        }
+        List<AiCombatantEntity> allies = level().getEntitiesOfClass(AiCombatantEntity.class,
+                getBoundingBox().inflate(ALLY_ALERT_RADIUS), ally -> ally != this && ally.getFaction() == getFaction());
+        for (AiCombatantEntity ally : allies) {
+            if (ally.getTarget() == null) {
+                ally.setTarget(attacker);
+            }
         }
     }
 
-    /** 死亡掉落：主手武器只掉一把 + 战利品容器内容（先摘主手再走原版流程，防原版装备掉落叠加） */
+    /**
+     * 死亡掉落：主手武器只掉一把（先摘主手再走原版流程，防原版装备掉落叠加）。
+     * 战利品容器（拾取物）始终掉落；装备容器（副武器/弹药）与主手武器由 /MSBS AIpmc drop 控制。
+     */
     @Override
     public void dropAllDeathLoot(ServerLevel level, DamageSource source) {
-        // 摘除主手后 super 无从掉落它（原版也会掉主手装备，不摘会与下方掉落重复成两把主武器）
         ItemStack mainHand = getMainHandItem();
         setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
         super.dropAllDeathLoot(level, source);
-        // 战利品容器内容（副武器 + 弹药）掉落供玩家搜刮
+        boolean dropEquipment = Config.AI_DROP_LOOT.get();
+        // 装备容器：受开关控制（关闭时销毁）
+        if (dropEquipment) {
+            for (int i = 0; i < equipment.getContainerSize(); i++) {
+                ItemStack stack = equipment.getItem(i);
+                if (!stack.isEmpty()) {
+                    spawnAtLocation(stack);
+                }
+            }
+        }
+        // 战利品容器：始终掉落
         for (int i = 0; i < loot.getContainerSize(); i++) {
             ItemStack stack = loot.getItem(i);
             if (!stack.isEmpty()) {
                 spawnAtLocation(stack);
             }
         }
+        equipment.clearContent();
         loot.clearContent();
-        if (!mainHand.isEmpty()) {
+        if (dropEquipment && !mainHand.isEmpty()) {
             spawnAtLocation(mainHand);
         }
     }
@@ -260,7 +337,13 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putString("Faction", getFaction().name());
-        ContainerHelper.saveAllItems(tag, loot.getItems(), this.registryAccess());
+        // 双容器分别存入子标签（ContainerHelper 默认用根 "Items" 键，避免两容器互相覆盖）
+        CompoundTag equipmentTag = new CompoundTag();
+        ContainerHelper.saveAllItems(equipmentTag, equipment.getItems(), this.registryAccess());
+        tag.put("Equipment", equipmentTag);
+        CompoundTag lootTag = new CompoundTag();
+        ContainerHelper.saveAllItems(lootTag, loot.getItems(), this.registryAccess());
+        tag.put("Loot", lootTag);
     }
 
     @Override
@@ -273,7 +356,12 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
                 setFaction(Faction.NONE);
             }
         }
-        ContainerHelper.loadAllItems(tag, loot.getItems(), this.registryAccess());
+        if (tag.contains("Equipment", CompoundTag.TAG_COMPOUND)) {
+            ContainerHelper.loadAllItems(tag.getCompound("Equipment"), equipment.getItems(), this.registryAccess());
+        }
+        if (tag.contains("Loot", CompoundTag.TAG_COMPOUND)) {
+            ContainerHelper.loadAllItems(tag.getCompound("Loot"), loot.getItems(), this.registryAccess());
+        }
     }
 
     /** AI 不应被玩家用栓绳带走 */

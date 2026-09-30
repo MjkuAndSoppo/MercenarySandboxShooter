@@ -1,0 +1,8 @@
+{
+  "entries": [
+    { "item": "superbwarfare:knife", "price": 100, "weight": 0.5 },
+    { "item": "superbwarfare:medical_kit", "price": 260, "weight": 1.0 },
+    { "item": "superbwarfare:defuser", "price": 500, "weight": 1.0 },
+    { "item": "superbwarfare:repair_tool", "price": 600, "weight": 2.0 }
+  ]
+}

@@ -9,20 +9,26 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import com.mercenarysandbox.msb.MercenarySandboxShooter;
 
 /**
- * 客户端游戏事件接线（GAME 总线）：M 键开关自绘战术地图（打开地图时再按一次关闭）。
+ * 客户端游戏事件接线（GAME 总线）：M 键战术地图 / B 键军火商店（打开时再按一次关闭）。
  */
 @EventBusSubscriber(modid = MercenarySandboxShooter.MODID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
 public final class MsbClientEvents {
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        if (!MsbKeyMappings.TACTICAL_MAP_KEY.consumeClick()) {
-            return;
+        if (MsbKeyMappings.TACTICAL_MAP_KEY.consumeClick()) {
+            if (mc.screen instanceof TacticalMapScreen) {
+                mc.setScreen(null);
+            } else if (mc.screen == null) {
+                mc.setScreen(new TacticalMapScreen());
+            }
         }
-        if (mc.screen instanceof TacticalMapScreen) {
-            mc.setScreen(null);
-        } else if (mc.screen == null) {
-            mc.setScreen(new TacticalMapScreen());
+        if (MsbKeyMappings.SHOP_KEY.consumeClick()) {
+            if (mc.screen instanceof ShopScreen) {
+                mc.setScreen(null);
+            } else if (mc.screen == null) {
+                mc.setScreen(new ShopScreen());
+            }
         }
     }
 

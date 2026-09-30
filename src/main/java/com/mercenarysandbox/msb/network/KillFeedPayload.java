@@ -12,9 +12,10 @@ import com.mercenarysandbox.msb.client.ClientKillFeed;
 
 /**
  * S2C 击杀提示载荷（仅发击杀者本人）：携带目标名称、本次击杀金钱/经验变动与本命连杀数。
- * 目标名称：玩家传其名字（isPlayer=true），怪物传翻译键（实体描述 key，客户端本地化）。
+ * 目标名称：玩家/AI 名传字面文本（isPlayer=true），怪物传翻译键（实体描述 key，客户端本地化）。
+ * friendlyFire=true 表示同阵营 AI 友伤：客户端仅显示一行「友伤 <名称> -xx$」，不显示下两行。
  */
-public record KillFeedPayload(String targetKey, boolean isPlayer, int money, int xp, int streak)
+public record KillFeedPayload(String targetKey, boolean isPlayer, int money, int xp, int streak, boolean friendlyFire)
         implements CustomPacketPayload {
 
     public static final Type<KillFeedPayload> TYPE =
@@ -26,6 +27,7 @@ public record KillFeedPayload(String targetKey, boolean isPlayer, int money, int
             ByteBufCodecs.VAR_INT, KillFeedPayload::money,
             ByteBufCodecs.VAR_INT, KillFeedPayload::xp,
             ByteBufCodecs.VAR_INT, KillFeedPayload::streak,
+            ByteBufCodecs.BOOL, KillFeedPayload::friendlyFire,
             KillFeedPayload::new);
 
     @Override

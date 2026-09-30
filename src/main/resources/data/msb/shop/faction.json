@@ -1,0 +1,14 @@
+{
+  "entries": [
+    { "item": "superbwarfare:glock_17", "price": 0, "weight": 1.0 },
+
+    { "item": "superbwarfare:hk_416", "faction": "lonestar", "price": 1400, "weight": 3.5 },
+    { "item": "superbwarfare:m_60", "faction": "lonestar", "price": 1950, "weight": 6.5 },
+
+    { "item": "superbwarfare:ak_12", "faction": "valkyra", "price": 1250, "weight": 3.4 },
+    { "item": "superbwarfare:svd", "faction": "valkyra", "price": 1850, "weight": 4.5 },
+
+    { "item": "superbwarfare:m_4", "faction": "manticore", "price": 1200, "weight": 3.2 },
+    { "item": "superbwarfare:mk_14", "faction": "manticore", "price": 1550, "weight": 4.0 }
+  ]
+}
