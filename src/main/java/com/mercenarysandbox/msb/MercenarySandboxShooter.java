@@ -4,10 +4,13 @@ import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
 
+import com.mercenarysandbox.msb.economy.WalletAttachments;
 import com.mercenarysandbox.msb.faction.FactionAttachments;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
@@ -27,8 +30,10 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraft.client.Minecraft;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
@@ -36,6 +41,8 @@ import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import com.mercenarysandbox.msb.block.BaseBlock;
+import com.mercenarysandbox.msb.client.AiCombatantRenderer;
+import com.mercenarysandbox.msb.entity.AiCombatantEntity;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(MercenarySandboxShooter.MODID)
@@ -50,6 +57,8 @@ public class MercenarySandboxShooter {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
     // Create a Deferred Register to hold CreativeModeTabs which will all be registered under the "msb" namespace
     public static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS = DeferredRegister.create(Registries.CREATIVE_MODE_TAB, MODID);
+    // Create a Deferred Register to hold EntityTypes which will all be registered under the "msb" namespace
+    public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(Registries.ENTITY_TYPE, MODID);
 
     // M0 注册链路验证：方块 / 物品 / 创造模式标签（后续里程碑会替换为真实玩法内容）
     public static final DeferredBlock<Block> TEST_BLOCK = BLOCKS.registerSimpleBlock("test_block", BlockBehaviour.Properties.of().mapColor(MapColor.STONE));
@@ -75,13 +84,22 @@ public class MercenarySandboxShooter {
             .icon(() -> TEST_ITEM.get().getDefaultInstance())
             .displayItems((parameters, output) -> output.accept(TEST_ITEM.get())).build());
 
+    // ===== AI 战斗单位实体（M1 实体化，docs/02 §3.12）：原版 Steve 外观，无攻击 goal =====
+    public static final DeferredHolder<EntityType<?>, EntityType<AiCombatantEntity>> AI_COMBATANT = ENTITIES.register("ai_combatant",
+            () -> EntityType.Builder.of(AiCombatantEntity::new, MobCategory.MISC)
+                    .sized(0.6F, 1.8F).build("ai_combatant"));
+
     public MercenarySandboxShooter(IEventBus modEventBus, ModContainer modContainer) {
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(this::onAttributeCreation);
 
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
+        ENTITIES.register(modEventBus);
         FactionAttachments.ATTACHMENT_TYPES.register(modEventBus);
+        WalletAttachments.ATTACHMENT_TYPES.register(modEventBus);
+        com.mercenarysandbox.msb.match.KillStreakAttachments.ATTACHMENT_TYPES.register(modEventBus);
 
         NeoForge.EVENT_BUS.register(this);
 
@@ -93,6 +111,11 @@ public class MercenarySandboxShooter {
     private void commonSetup(FMLCommonSetupEvent event) {
         LOGGER.info("MercenarySandboxShooter common setup loaded (msb)");
         Config.ITEM_STRINGS.get().forEach((item) -> LOGGER.info("ITEM >> {}", item));
+    }
+
+    /** AI 实体属性注册（MOD 总线）：LivingEntity 构造期 getMaxHealth 需要，缺失会 NPE 崩溃 */
+    private void onAttributeCreation(EntityAttributeCreationEvent event) {
+        event.put(AI_COMBATANT.get(), AiCombatantEntity.createAttributes().build());
     }
 
     // Add the test block item to the building blocks tab
@@ -118,6 +141,11 @@ public class MercenarySandboxShooter {
         static void onClientSetup(FMLClientSetupEvent event) {
             LOGGER.info("MercenarySandboxShooter client setup (msb)");
             LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+        }
+
+        @SubscribeEvent
+        static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
+            event.registerEntityRenderer(AI_COMBATANT.get(), AiCombatantRenderer::new);
         }
     }
 }

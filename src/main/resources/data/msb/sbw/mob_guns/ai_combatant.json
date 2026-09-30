@@ -1,0 +1,22 @@
+{
+  "Probability": 1,
+  "GoalWeight": 3,
+  "Guns": {
+    "ID": "superbwarfare:ak_47",
+    "Weight": 1,
+    "AimTime": 30,
+    "ClearAimTimeWhenLostSight": true,
+    "SemiFireInterval": 500,
+    "BackupAmmo": 0,
+    "SpawnWithLoadedAmmo": true,
+    "ShootDistance": 30,
+    "Zoom": true,
+    "Spread": 1,
+    "Data": {
+      "GunData": {
+        "VirtualAmmo": 512,
+        "Ammo": 30
+      }
+    }
+  }
+}

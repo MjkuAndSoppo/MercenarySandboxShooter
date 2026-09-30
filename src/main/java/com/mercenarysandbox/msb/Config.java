@@ -53,6 +53,19 @@ public class Config {
             .comment("Rotate the tactical map with the player's facing direction. Disable for a fixed north-up map")
             .define("tacticalMapRotateWithPlayer", true);
 
+    // ===== 击杀结算（docs/02 击杀提示）=====
+    public static final ModConfigSpec.IntValue KILL_MONEY_REWARD = BUILDER
+            .comment("Money reward for killing a monster or enemy player")
+            .defineInRange("killMoneyReward", 20, 0, 10000);
+
+    public static final ModConfigSpec.IntValue KILL_XP_REWARD = BUILDER
+            .comment("Experience points granted directly to the killer")
+            .defineInRange("killXpReward", 10, 0, 1000);
+
+    public static final ModConfigSpec.IntValue KILL_FRIENDLY_PENALTY = BUILDER
+            .comment("Money penalty for killing a teammate (docs/02 friendly fire rules)")
+            .defineInRange("killFriendlyPenalty", 100, 1, 10000);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean validateItemName(final Object obj) {

@@ -166,7 +166,7 @@ public final class TacticalMapScreen extends Screen {
         rotate = Config.TACTICAL_MAP_ROTATE_WITH_PLAYER.get();
         double yawRad = mc.player == null ? 0.0D : Math.toRadians(mc.player.getYRot());
         yawCos = Math.cos(yawRad);
-        yawSin = -Math.sin(yawRad);
+        yawSin = Math.sin(yawRad);
 
         if (mc.player == null || units == null) {
             // 服务端未下发地图数据（未入对局）：显示等待提示 + 对局栏 + 罗盘
@@ -286,17 +286,20 @@ public final class TacticalMapScreen extends Screen {
         g.drawCenteredString(font, label, x0 + BTN_W / 2, y0 + (BTN_H - font.lineHeight) / 2 + 1, 0xFFFFFF);
     }
 
-    /** 三阵营基地方块标记（docs/02 §5.1）：阵营色方块点 + B 字母；坐标来自 state.basePositions（{x,z,y}×3，-1=未放置） */
+    /** 三阵营基地方块标记（docs/02 §5.1）：阵营色安全区范围圈 + 方块点 + B 字母；坐标来自 state.basePositions（{x,z,y}×3，-1=未放置） */
     private void drawBases(GuiGraphics g, int cx, int cy, double scale, MatchStatePayload state) {
         if (state == null || state.basePositions() == null) {
             return;
         }
         int[] pos = state.basePositions();
-        int[] colors = {0xFF5555, 0x55AFFF, 0x55FF55}; // LONESTAR / VALKYRA / MANTICORE
+        int[] ringColors = {0x66FF5555, 0x6655AFFF, 0x6655FF55}; // LONESTAR / VALKYRA / MANTICORE（含 alpha）
+        int[] colors = {0xFF5555, 0x55AFFF, 0x55FF55};
         for (int i = 0; i < 3; i++) {
             if (pos[i * 3] == -1) {
                 continue;
             }
+            // 安全区范围圈（半径与服务器 Config.BASE_RADIUS 一致；drawRing 自带屏外剔除）
+            drawRing(g, cx, cy, scale, pos[i * 3], pos[i * 3 + 1], Config.BASE_RADIUS.get(), ringColors[i]);
             int px = sx(cx, scale, pos[i * 3], pos[i * 3 + 1]);
             int pz = sy(cy, scale, pos[i * 3], pos[i * 3 + 1]);
             if (px < -24 || px > width + 24 || pz < -24 || pz > height + 24) {
@@ -551,8 +554,8 @@ public final class TacticalMapScreen extends Screen {
 
     /** 世界单位方向 (dx,dz) → 屏幕方向 (vx,vy)（与地图渲染同一变换，模长保持 1） */
     private double[] dirToScreen(double dx, double dz) {
-        double vx = rotate ? dx * yawCos - dz * yawSin : dx;
-        double vy = rotate ? -(dx * yawSin + dz * yawCos) : dz;
+        double vx = rotate ? -dx * yawCos - dz * yawSin : dx;
+        double vy = rotate ? dx * yawSin - dz * yawCos : dz;
         return new double[]{vx, vy};
     }
 
@@ -621,8 +624,8 @@ public final class TacticalMapScreen extends Screen {
         double fX = -Math.sin(a); // 世界前向 X（yaw=0 朝南 +Z）
         double fZ = Math.cos(a);  // 世界前向 Z
         // 屏幕方向 = sx/sy 变换对单位向量的作用，与地图渲染共享同一旋转参数
-        double vx = rotate ? fX * yawCos - fZ * yawSin : fX;
-        double vy = rotate ? -(fX * yawSin + fZ * yawCos) : fZ;
+        double vx = rotate ? -fX * yawCos - fZ * yawSin : fX;
+        double vy = rotate ? fX * yawSin - fZ * yawCos : fZ;
         double len = Math.hypot(vx, vy);
         if (len < 1.0E-4) {
             return;
@@ -648,7 +651,7 @@ public final class TacticalMapScreen extends Screen {
         double dx = wx - camX;
         double dz = wz - camZ;
         return rotate
-                ? (int) Math.round(cx + (dx * yawCos - dz * yawSin) * scale)
+                ? (int) Math.round(cx - (dx * yawCos + dz * yawSin) * scale)
                 : (int) Math.round(cx + dx * scale);
     }
 
@@ -657,7 +660,7 @@ public final class TacticalMapScreen extends Screen {
         double dx = wx - camX;
         double dz = wz - camZ;
         return rotate
-                ? (int) Math.round(cy - (dx * yawSin + dz * yawCos) * scale)
+                ? (int) Math.round(cy + (dx * yawSin - dz * yawCos) * scale)
                 : (int) Math.round(cy + dz * scale);
     }
 
@@ -665,7 +668,7 @@ public final class TacticalMapScreen extends Screen {
     private double worldDx(double px, double py, double scale) {
         double nx = px / scale;
         double ny = py / scale;
-        return rotate ? nx * yawCos - ny * yawSin : nx;
+        return rotate ? -nx * yawCos + ny * yawSin : nx;
     }
 
     /** 屏幕偏移(px,py) → 世界偏移 Z 分量 */

@@ -1,5 +1,11 @@
 # AI 实体化加入 M1
 
+> **状态：✅ 已落地（2026-09-30）**。方案全部实现并经 `gradlew build` + 沙箱外 runClient 实测验证——AI 推进/不消失/复活/进圈四项通过（细节见 docs/02 §3.12 排障记录）。本文档保留为设计留档，实现差异：
+> - `lazyTick` 签名增加 `tickCounter` 参数（诊断门控，避免 gameTime 相位错位）
+> - 追加 `respawnQueue` 基地复活（±6 格，10s CD）、无基地不生成/复活、chunk 强制加载、`purgeStaleUnits` 清存档残留
+> - 临时诊断探针仍在代码中，待用户确认后清理
+> - **裂手修复（2026-09-30）**：`getTextureLocation` 原用 `DefaultPlayerSkin.getDefaultTexture()`（随本地玩家皮肤类型返回 slim/宽臂纹理，宽臂模型配 slim 时手臂 UV 错位「裂手」）→ 改为固定 `ResourceLocation.withDefaultNamespace("textures/entity/steve.png")`（等价原方案的 `PlayerRenderer.TEXTURE`）
+
 ## Context（背景）
 
 M1 阵营与计分目前 AI 是「抽象模拟单位」（[AiUnit.java](file:///e:/project%20666/MercenarySandboxShooter/src/main/java/com/mercenarysandbox/msb/ai/AiUnit.java)：纯服务端数据，无实体无渲染），实体化一直标注「延后」。用户要求把 **AI 实体化提前纳入 M1**：AI 变为真实 Minecraft 实体，可被渲染、可被攻击、以实体真实位置参与占区计分，真人顶替/退出补位管理实体生命周期。

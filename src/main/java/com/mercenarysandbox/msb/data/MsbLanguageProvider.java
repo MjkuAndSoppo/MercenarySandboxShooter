@@ -35,13 +35,15 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("block.msb.test_block", "MSB Test Block");
         this.add("item.msb.test_item", "MSB Test Item");
         // 基地方块（M1）
-        this.add("block.msb.base_block_lonestar", "Lonestar Base");
-        this.add("block.msb.base_block_valkyra", "Valkyra Base");
-        this.add("block.msb.base_block_manticore", "Manticore Base");
+        this.add("block.msb.base_block_lonestar", "S.F. Base");
+        this.add("block.msb.base_block_valkyra", "KCCO Base");
+        this.add("block.msb.base_block_manticore", "I.O.P. Base");
+        // AI 实体（M1 实体化）
+        this.add("entity.msb.ai_combatant", "AI Combatant");
         // 阵营显示名（计分板队伍 / HUD / Tab）
-        this.add("team.msb.lonestar", "LONESTAR");
-        this.add("team.msb.valkyra", "VALKYRA");
-        this.add("team.msb.manticore", "MANTICORE");
+        this.add("team.msb.lonestar", "SANGVIS FERRI");
+        this.add("team.msb.valkyra", "Special Operations Forces Command");
+        this.add("team.msb.manticore", "Important Operation Prototype");
         // HUD 计分板
         this.add("msb.hud.zone", "Zone (%s,%s) R=%s");
         this.add("msb.hud.settle", "Settle in %s s");
@@ -80,6 +82,9 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.tactical_map.legend.neutral", "Unassigned");
         this.add("msb.tactical_map.legend.self", "You");
         this.add("msb.tactical_map.legend.base", "Base");
+        // 击杀提示（M2：docs/02 击杀提示）
+        this.add("msb.kill_feed.annihilate", "Eliminate %s %s");
+        this.add("msb.kill_feed.info", "Kills %s | XP %s");
     }
 
     private void addChinese() {
@@ -88,13 +93,15 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("block.msb.test_block", "MSB 测试方块");
         this.add("item.msb.test_item", "MSB 测试物品");
         // 基地方块（M1）
-        this.add("block.msb.base_block_lonestar", "星野孤星基地");
-        this.add("block.msb.base_block_valkyra", "瓦尔基里基地");
-        this.add("block.msb.base_block_manticore", "曼提柯尔基地");
+        this.add("block.msb.base_block_lonestar", "铁血工业基地");
+        this.add("block.msb.base_block_valkyra", "新苏联特战部基地");
+        this.add("block.msb.base_block_manticore", "重要原型基地");
+        // AI 实体（M1 实体化）
+        this.add("entity.msb.ai_combatant", "AI 作战单位");
         // 阵营显示名
-        this.add("team.msb.lonestar", "星野孤星");
-        this.add("team.msb.valkyra", "瓦尔基里");
-        this.add("team.msb.manticore", "曼提柯尔");
+        this.add("team.msb.lonestar", "铁血工业制造");
+        this.add("team.msb.valkyra", "新苏联特战部");
+        this.add("team.msb.manticore", "重要原型制造");
         // HUD 计分板
         this.add("msb.hud.zone", "控制区 (%s,%s) R=%s");
         this.add("msb.hud.settle", "%s 秒后结算");
@@ -133,5 +140,8 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.tactical_map.legend.neutral", "未分配");
         this.add("msb.tactical_map.legend.self", "你");
         this.add("msb.tactical_map.legend.base", "基地");
+        // 击杀提示（M2）
+        this.add("msb.kill_feed.annihilate", "歼灭 %s %s");
+        this.add("msb.kill_feed.info", "击杀x %s|经验 %s");
     }
 }

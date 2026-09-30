@@ -33,7 +33,9 @@ public final class BaseData extends SavedData {
                 continue;
             }
             int[] v = tag.getIntArray("base_" + f.name());
-            if (v.length == 3 && v[0] >= 0) {
+            // 注意：不可能用 v[0]>=0 判断是否存在——基地方块可能放在 x<0（世界西侧），
+            // getIntArray 对缺失 key 返回空数组，故仅以长度==3 判存在即可。
+            if (v.length == 3) {
                 data.positions.put(f, new BlockPos(v[0], v[2], v[1]));
             }
         }

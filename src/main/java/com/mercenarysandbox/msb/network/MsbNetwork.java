@@ -21,6 +21,8 @@ public final class MsbNetwork {
         registrar.playToClient(MatchStatePayload.TYPE, MatchStatePayload.STREAM_CODEC, MatchStatePayload::handle);
         registrar.playToClient(SyncFactionPayload.TYPE, SyncFactionPayload.STREAM_CODEC, SyncFactionPayload::handle);
         registrar.playToClient(UnitPositionsPayload.TYPE, UnitPositionsPayload.STREAM_CODEC, UnitPositionsPayload::handle);
+        registrar.playToClient(WalletPayload.TYPE, WalletPayload.STREAM_CODEC, WalletPayload::handle);
+        registrar.playToClient(KillFeedPayload.TYPE, KillFeedPayload.STREAM_CODEC, KillFeedPayload::handle);
         registrar.playToServer(TeleportRequestPayload.TYPE, TeleportRequestPayload.STREAM_CODEC, TeleportRequestPayload::handle);
     }
 

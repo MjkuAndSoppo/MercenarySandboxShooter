@@ -53,3 +53,6 @@ repo/
 /mixins.superbwarfare.json
 /kubejs.*
 /.cache/
+
+### SBW 源码参考（禁止入库：GPL-3.0 只读参考，用于调研 API，不复制其代码）###
+/sbw-src/

@@ -1,8 +1,9 @@
 {
-  "block.msb.base_block_lonestar": "星野孤星基地",
-  "block.msb.base_block_manticore": "曼提柯尔基地",
-  "block.msb.base_block_valkyra": "瓦尔基里基地",
+  "block.msb.base_block_lonestar": "铁血工业基地",
+  "block.msb.base_block_manticore": "重要原型基地",
+  "block.msb.base_block_valkyra": "新苏联特战部基地",
   "block.msb.test_block": "MSB 测试方块",
+  "entity.msb.ai_combatant": "AI 作战单位",
   "item.msb.test_item": "MSB 测试物品",
   "itemGroup.msb": "雇佣兵沙盒射击",
   "key.categories.msb": "雇佣兵沙盒射击",
@@ -11,6 +12,8 @@
   "msb.chat.settle": "控制区结算：",
   "msb.hud.settle": "%s 秒后结算",
   "msb.hud.zone": "控制区 (%s,%s) R=%s",
+  "msb.kill_feed.annihilate": "歼灭 %s %s",
+  "msb.kill_feed.info": "击杀x %s|经验 %s",
   "msb.tactical_map.btn.zone_center": "控制区",
   "msb.tactical_map.countdown": "%s 秒",
   "msb.tactical_map.cursor": "X %s Z %s  |  距你 %s 格",
@@ -38,7 +41,7 @@
   "msb.tactical_map.unit": "单位",
   "msb.tactical_map.unlock": "解锁",
   "msb.tactical_map.waiting": "等待对局数据...",
-  "team.msb.lonestar": "星野孤星",
-  "team.msb.manticore": "曼提柯尔",
-  "team.msb.valkyra": "瓦尔基里"
+  "team.msb.lonestar": "铁血工业制造",
+  "team.msb.manticore": "重要原型制造",
+  "team.msb.valkyra": "新苏联特战部"
 }

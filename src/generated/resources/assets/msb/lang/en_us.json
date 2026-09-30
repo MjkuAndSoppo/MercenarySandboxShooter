@@ -1,8 +1,9 @@
 {
-  "block.msb.base_block_lonestar": "Lonestar Base",
-  "block.msb.base_block_manticore": "Manticore Base",
-  "block.msb.base_block_valkyra": "Valkyra Base",
+  "block.msb.base_block_lonestar": "S.F. Base",
+  "block.msb.base_block_manticore": "I.O.P. Base",
+  "block.msb.base_block_valkyra": "KCCO Base",
   "block.msb.test_block": "MSB Test Block",
+  "entity.msb.ai_combatant": "AI Combatant",
   "item.msb.test_item": "MSB Test Item",
   "itemGroup.msb": "Mercenary Sandbox Shooter",
   "key.categories.msb": "Mercenary Sandbox Shooter",
@@ -11,6 +12,8 @@
   "msb.chat.settle": "Zone settled:",
   "msb.hud.settle": "Settle in %s s",
   "msb.hud.zone": "Zone (%s,%s) R=%s",
+  "msb.kill_feed.annihilate": "Eliminate %s %s",
+  "msb.kill_feed.info": "Kills %s | XP %s",
   "msb.tactical_map.btn.zone_center": "Zone",
   "msb.tactical_map.countdown": "%s s",
   "msb.tactical_map.cursor": "X %s Z %s  |  %s blocks away",
@@ -38,7 +41,7 @@
   "msb.tactical_map.unit": "Unit",
   "msb.tactical_map.unlock": "Unlock",
   "msb.tactical_map.waiting": "Waiting for match data...",
-  "team.msb.lonestar": "LONESTAR",
-  "team.msb.manticore": "MANTICORE",
-  "team.msb.valkyra": "VALKYRA"
+  "team.msb.lonestar": "SANGVIS FERRI",
+  "team.msb.manticore": "Important Operation Prototype",
+  "team.msb.valkyra": "Special Operations Forces Command"
 }

@@ -22,7 +22,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import com.mercenarysandbox.msb.Config;
 import com.mercenarysandbox.msb.MercenarySandboxShooter;
 import com.mercenarysandbox.msb.ai.AiManager;
-import com.mercenarysandbox.msb.ai.AiUnit;
+import com.mercenarysandbox.msb.entity.AiCombatantEntity;
 import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.faction.FactionManager;
 import com.mercenarysandbox.msb.network.MatchStatePayload;
@@ -106,7 +106,7 @@ public final class MatchManager {
         }
     }
 
-    /** 玩家放置 base_block_* 方块时注册该阵营基地（安全区跟随方块坐标；重复放置覆盖，落盘持久化） */
+    /** 玩家放置 base_block_* 方块时注册该阵营基地（安全区跟随方块坐标；重复放置覆盖，落盘持久化；AI 补足） */
     public void registerBase(Faction faction, BlockPos pos) {
         basePositions.put(faction, pos);
         baseZones.put(faction, new ControlZone(pos.getX(), pos.getY(), pos.getZ(), Config.BASE_RADIUS.get()));
@@ -114,6 +114,8 @@ public final class MatchManager {
         MercenarySandboxShooter.LOGGER.info("MSB 基地方块注册: {} 位置({},{},{}) 安全区半径{}",
                 faction.name(), pos.getX(), pos.getY(), pos.getZ(), Config.BASE_RADIUS.get());
         broadcastState();
+        // 无基地时 AI 不生成；放置后立即补足该阵营 AI（docs/02 §3.12）
+        AiManager.get(server).onBasePlaced(faction);
     }
 
     /** 方块被拆除 → 移除该阵营基地项并落盘，安全区即时失效（未到该位置不动作） */
@@ -155,7 +157,7 @@ public final class MatchManager {
         return zone;
     }
 
-    /** 服务端每 tick 驱动：倒计时 + 结算 + 状态广播 + 战术地图单位广播 + 基地载具恢复 */
+    /** 服务端每 tick 驱动：倒计时 + 结算 + 状态广播 + 战术地图单位广播 + 基地载具恢复（AI 惰性驱动见 MsbServerEvents.onServerTick） */
     public void tick() {
         if (zone == null) {
             return;
@@ -325,8 +327,8 @@ public final class MatchManager {
             boolean engaged = now - lastHurtTick.getOrDefault(p.getUUID(), Integer.MIN_VALUE) < ENGAGED_TICKS;
             units.add(new UnitPositionsPayload.UnitEntry(f.getId(), p.blockPosition().getX(), p.blockPosition().getZ(), engaged));
         }
-        for (AiUnit u : AiManager.get(server).allUnits()) {
-            units.add(new UnitPositionsPayload.UnitEntry(u.getFaction().getId(), u.getPos().getX(), u.getPos().getZ(), false));
+        for (AiCombatantEntity u : AiManager.get(server).allUnits()) {
+            units.add(new UnitPositionsPayload.UnitEntry(u.getFaction().getId(), u.blockPosition().getX(), u.blockPosition().getZ(), false));
         }
         int mapRadius = Math.max(MIN_MAP_RADIUS, zone.getRadius() * MAP_RADIUS_MULTIPLIER);
         return new UnitPositionsPayload(zone.getCenterX(), zone.getCenterZ(), mapRadius, units);

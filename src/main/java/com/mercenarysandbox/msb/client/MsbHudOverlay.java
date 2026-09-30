@@ -16,11 +16,13 @@ import com.mercenarysandbox.msb.network.MatchStatePayload;
 
 /**
  * HUD 顶部对局栏（GuiGraphics 自绘，P0 零重 UI 库，docs/02 §3.7）。
- * 全宽顶部条：三方分数（阵营色分段）整体居中，结算倒计时右对齐仅显示「xx S」。
+ * 全宽顶部条：结算倒计时「xx S」贴左边，三方分数（阵营色分段）整体居中，
+ * 右侧显示财产「当前花销$ | 总资产$」（本人钱包，S2C WalletPayload 下发）。
  */
 @EventBusSubscriber(modid = MercenarySandboxShooter.MODID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
 public final class MsbHudOverlay {
-    private static final int BAR_H = 16;
+    /** 顶栏文字贴靠屏幕上边缘（y=2）；背景条高度贴合文字（y + 行高 + 下边距） */
+    private static final int TEXT_Y = 2;
 
     @SubscribeEvent
     public static void onRenderGui(RenderGuiEvent.Post event) {
@@ -33,28 +35,34 @@ public final class MsbHudOverlay {
         Font font = Minecraft.getInstance().font;
         int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
 
-        // 全宽顶部条
-        g.fill(0, 0, screenWidth, BAR_H + 2, 0xC0101010);
+        // 全宽顶部条（高度贴合文字：y + 行高 + 下边距，不再用固定 16 高）
+        g.fill(0, 0, screenWidth, TEXT_Y + font.lineHeight + 2, 0xC0101010);
+
+        // 结算倒计时「xx S」贴左（y 贴靠上边缘）
+        Component cd = Component.literal(state.countdownSeconds() + " S");
+        g.drawString(font, cd, 6, TEXT_Y, 0xFFFFFF);
 
         // 三色分数整体居中
         Component ls = factionLine(Faction.LONESTAR, state.lonestarScore());
         Component va = factionLine(Faction.VALKYRA, state.valkyraScore());
         Component mt = factionLine(Faction.MANTICORE, state.manticoreScore());
-        int total = font.width(ls) + font.width(va) + font.width(mt) + 12;
-        int x = Math.max(8, screenWidth / 2 - total / 2);
+        int mid = Math.max(font.width(cd) + 18 * 2,
+                screenWidth / 2 - (font.width(ls) + font.width(va) + font.width(mt) + 12) / 2);
+        int x = mid;
         x = drawSegment(g, font, x, ls, rgb(Faction.LONESTAR));
         x = drawSegment(g, font, x, va, rgb(Faction.VALKYRA));
         drawSegment(g, font, x, mt, rgb(Faction.MANTICORE));
 
-        // 刷新时间（结算倒计时）偏右，仅显示「xx S」
-        Component cd = Component.literal(state.countdownSeconds() + " S");
-        g.drawString(font, cd, screenWidth - 6 - font.width(cd), 8, 0xFFFFFF);
+        // 右侧财产：当前花销$ | 总资产$（右对齐，y 贴靠上边缘）
+        Component wallet = Component.literal(ClientMatchState.getWalletSpent() + "$ | "
+                + ClientMatchState.getWalletTotal() + "$");
+        g.drawString(font, wallet, screenWidth - 6 - font.width(wallet), TEXT_Y, 0xFFFFFF);
     }
 
-    /** 绘制一段文本并返回下一个绘制 x（用于分段着色，y 固定 8 与顶栏居中） */
+    /** 绘制一段文本并返回下一个绘制 x（用于分段着色，y 贴靠上边缘） */
     private static int drawSegment(GuiGraphics g, Font font, int x, Component text, int color) {
         int w = font.width(text);
-        g.drawString(font, text, x, 8, color);
+        g.drawString(font, text, x, TEXT_Y, color);
         return x + w + 6;
     }
 
