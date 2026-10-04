@@ -13,10 +13,17 @@ import com.mercenarysandbox.msb.network.WalletPayload;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
+
+import top.theillusivec4.curios.api.CuriosApi;
+import top.theillusivec4.curios.api.type.capability.ICuriosItemHandler;
+import top.theillusivec4.curios.api.type.inventory.ICurioStacksHandler;
+import top.theillusivec4.curios.api.type.inventory.IDynamicStackHandler;
 
 /**
  * 服务端交易逻辑（docs §4，唯一改钱包/储存格/背包入口）。
@@ -63,6 +70,7 @@ public final class ShopManager {
             case TAKE -> take(player, payload);
             case STORE -> store(player, payload);
             case SWAP_HOTBAR -> swapHotbar(player, payload);
+            case EQUIP -> equip(player, payload);
         }
     }
 
@@ -307,6 +315,123 @@ public final class ShopManager {
         WeightService.apply(player);
         result(player, p.action(), ShopCode.OK, storedItem, hotbar + 1, 0, 0);
         syncStorage(player);
+    }
+
+    // ===== 双击装备（护甲 → 原版护甲槽；饰品 → Curios 槽；替换下来的物品移交储存格） =====
+
+    /**
+     * 双击装备：来源可为储存格堆叠或玩家栏槽位（取 1 件）。
+     * 目标解析：原版护甲（头盔/胸甲等）→ 对应护甲槽；饰品（如降落伞）→ Curios 对应槽。
+     * 被替换下来的原槽位物品优先移交储存格（满则入包，再满则掉落）。
+     */
+    private static void equip(ServerPlayer player, ShopTradePayload p) {
+        boolean fromStorage = p.zone() == ShopTradePayload.Zone.STORAGE;
+        ShopStorage storage = storage(player);
+        ShopStorage.Stack storedStack = null;
+        ItemStack source;
+        if (fromStorage) {
+            storedStack = storage.get(p.slot());
+            if (storedStack == null || !storedStack.item().equals(p.item())) {
+                result(player, p.action(), ShopCode.NOT_ENOUGH, p.item(), 1, 0, 0);
+                return;
+            }
+            source = templateOf(storedStack.item());
+        } else {
+            ItemStack live = playerStack(player, p.zone(), p.slot());
+            if (live.isEmpty() || !itemId(live).equals(p.item())) {
+                result(player, p.action(), ShopCode.NOT_ENOUGH, p.item(), 1, 0, 0);
+                return;
+            }
+            source = live.copyWithCount(1);
+        }
+        if (source.isEmpty()) {
+            result(player, p.action(), ShopCode.UNKNOWN_ITEM, p.item(), 1, 0, 0);
+            return;
+        }
+        EquipmentSlot armorSlot = armorSlotOf(source);
+        String curioSlot = armorSlot == null ? curioSlotOf(source, player) : null;
+        if (armorSlot == null && curioSlot == null) {
+            result(player, p.action(), ShopCode.NOT_EQUIPPABLE, p.item(), 1, 0, 0);
+            return;
+        }
+        // 已在该槽位自装备：无操作
+        if (armorSlot != null && p.zone() == ShopTradePayload.Zone.ARMOR && slotArmorIndex(p.slot()) == armorSlot.getIndex()) {
+            result(player, p.action(), ShopCode.OK, p.item(), 1, 0, 0);
+            return;
+        }
+        ItemStack replaced;
+        if (armorSlot != null) {
+            replaced = player.getItemBySlot(armorSlot).copy();
+            player.setItemSlot(armorSlot, source.copy());
+        } else {
+            IDynamicStackHandler stacks = curioStacks(player, curioSlot);
+            if (stacks == null) {
+                result(player, p.action(), ShopCode.NOT_EQUIPPABLE, p.item(), 1, 0, 0);
+                return;
+            }
+            int idx = 0;
+            for (int i = 0; i < stacks.getSlots(); i++) {
+                if (stacks.getStackInSlot(i).isEmpty()) {
+                    idx = i;
+                    break;
+                }
+            }
+            replaced = stacks.getStackInSlot(idx).copy();
+            stacks.setStackInSlot(idx, source.copy());
+        }
+        // 消耗来源 1 件（装备即压缩绿框无损额度）
+        if (fromStorage) {
+            storedStack.setCount(storedStack.count() - 1);
+            if (storedStack.count() <= 0) {
+                storage.remove(p.slot());
+            }
+        } else {
+            playerStack(player, p.zone(), p.slot()).shrink(1);
+            player.getInventory().setChanged();
+        }
+        if (!replaced.isEmpty()) {
+            giveOrStore(player, replaced);
+        }
+        WeightService.apply(player);
+        result(player, p.action(), ShopCode.OK, p.item(), 1, 0, 0);
+        syncStorage(player);
+    }
+
+    /** 护甲展示下标（头盔/胸甲/护腿/靴子）→ armor 库存下标 */
+    private static int slotArmorIndex(int displaySlot) {
+        return displaySlot >= 0 && displaySlot < ARMOR_ORDER.length ? ARMOR_ORDER[displaySlot] : -1;
+    }
+
+    /** 原版护甲槽（非护甲返回 null） */
+    private static EquipmentSlot armorSlotOf(ItemStack stack) {
+        return stack.getItem() instanceof ArmorItem armor ? armor.getEquipmentSlot() : null;
+    }
+
+    /** 物品可放入的 Curios 槽标识（无则 null，如背饰槽 "back"） */
+    private static String curioSlotOf(ItemStack stack, ServerPlayer player) {
+        return CuriosApi.getItemStackSlots(stack, player).keySet().stream().findFirst().orElse(null);
+    }
+
+    private static IDynamicStackHandler curioStacks(ServerPlayer player, String slot) {
+        ICuriosItemHandler handler = CuriosApi.getCuriosInventory(player).orElse(null);
+        if (handler == null) {
+            return null;
+        }
+        ICurioStacksHandler stacksHandler = handler.getStacksHandler(slot).orElse(null);
+        return stacksHandler == null ? null : stacksHandler.getStacks();
+    }
+
+    /** 替换下来的物品移交储存格（满则入包，再满则掉落） */
+    private static void giveOrStore(ServerPlayer player, ItemStack stack) {
+        ResourceLocation id = itemId(stack);
+        ShopStorage storage = storage(player);
+        if (storageRoom(storage, id) >= stack.getCount()) {
+            addToStorage(storage, id, stack.getCount(), 0);
+        } else if (playerRoom(player, id) >= stack.getCount()) {
+            addToPlayer(player, stack.copy(), stack.getCount());
+        } else {
+            player.drop(stack.copy(), false);
+        }
     }
 
     /** 写入玩家栏指定区/槽位（护甲按展示顺序映射到 armor 下标） */

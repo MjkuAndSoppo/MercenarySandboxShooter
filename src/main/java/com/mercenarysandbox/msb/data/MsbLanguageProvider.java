@@ -157,9 +157,10 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.shop.gun.launcher", "Launcher");
         this.add("msb.shop.gun.special", "Special");
         this.add("msb.shop.category.ammo", "Ammo");
-        this.add("msb.shop.category.armor", "Armor");
+        this.add("msb.shop.category.equipment", "Equipment");
+        this.add("msb.shop.equip.type.armor", "Armor");
+        this.add("msb.shop.equip.type.item", "Items");
         this.add("msb.shop.category.throwable", "Throwables");
-        this.add("msb.shop.category.utility", "Utility");
         this.add("msb.shop.category.honor", "Honor Store");
         this.add("msb.shop.honor", "Honor %s");
         this.add("msb.shop.empty", "No items");
@@ -192,8 +193,10 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.shop.result.taken", "Took out %s x%s");
         this.add("msb.shop.result.stored", "Stored %s x%s");
         this.add("msb.shop.result.swapped", "Swapped %s into hotbar slot %s");
+        this.add("msb.shop.result.equipped", "Equipped %s");
         this.add("msb.shop.error.no_balance", "Not enough money");
         this.add("msb.shop.error.no_honor", "Not enough honor points");
+        this.add("msb.shop.error.not_equippable", "This item cannot be equipped");
         this.add("msb.shop.error.storage_full", "Storage is full");
         this.add("msb.shop.error.bag_full", "Inventory is full");
         this.add("msb.shop.error.over_weight", "Over the weight limit");
@@ -333,9 +336,10 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.shop.gun.launcher", "发射器");
         this.add("msb.shop.gun.special", "特殊");
         this.add("msb.shop.category.ammo", "弹药");
-        this.add("msb.shop.category.armor", "护甲");
+        this.add("msb.shop.category.equipment", "装备");
+        this.add("msb.shop.equip.type.armor", "护甲");
+        this.add("msb.shop.equip.type.item", "道具");
         this.add("msb.shop.category.throwable", "投掷物");
-        this.add("msb.shop.category.utility", "工具");
         this.add("msb.shop.category.honor", "荣誉商店");
         this.add("msb.shop.honor", "荣誉 %s");
         this.add("msb.shop.empty", "暂无商品");
@@ -368,8 +372,10 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.shop.result.taken", "已取回 %s ×%s（绿框已失效）");
         this.add("msb.shop.result.stored", "已存入 %s ×%s");
         this.add("msb.shop.result.swapped", "已对调 %s 至快捷栏第 %s 格");
+        this.add("msb.shop.result.equipped", "已装备 %s");
         this.add("msb.shop.error.no_balance", "余额不足");
         this.add("msb.shop.error.no_honor", "荣誉点不足");
+        this.add("msb.shop.error.not_equippable", "该物品不可装备");
         this.add("msb.shop.error.storage_full", "储存格已满");
         this.add("msb.shop.error.bag_full", "背包已满");
         this.add("msb.shop.error.over_weight", "负重超限");

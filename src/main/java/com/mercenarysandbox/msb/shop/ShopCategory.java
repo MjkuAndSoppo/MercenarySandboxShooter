@@ -11,9 +11,9 @@ public enum ShopCategory {
     /** 枪械（主/副武器合并）：条目用 {@link GunType} 再细分 */
     GUNS("guns"),
     AMMO("ammo"),
-    ARMOR("armor"),
+    /** 装备（护甲 + 工具合并）：条目用 {@link EquipType} 再细分 */
+    EQUIPMENT("equipment"),
     THROWABLE("throwable"),
-    UTILITY("utility"),
     /** 荣誉商店（垫底）：荣誉点结算，内容与获得方式待定 */
     HONOR("honor");
 

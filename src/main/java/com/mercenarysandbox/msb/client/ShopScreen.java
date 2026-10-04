@@ -8,9 +8,11 @@ import com.mercenarysandbox.msb.network.ShopDataPayload;
 import com.mercenarysandbox.msb.network.ShopResultPayload;
 import com.mercenarysandbox.msb.network.ShopStoragePayload;
 import com.mercenarysandbox.msb.network.ShopTradePayload;
+import com.mercenarysandbox.msb.shop.EquipType;
 import com.mercenarysandbox.msb.shop.GunType;
 import com.mercenarysandbox.msb.shop.ShopCategory;
 import com.mercenarysandbox.msb.shop.ShopCode;
+import com.mercenarysandbox.msb.shop.ShopSubtype;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -21,10 +23,13 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import org.lwjgl.glfw.GLFW;
+
+import top.theillusivec4.curios.api.CuriosApi;
 
 /**
  * 军火商店（B 键开关，GuiGraphics 自绘；docs §5，原型 ui-prototype/shop 的落地实现）。
@@ -102,8 +107,8 @@ public final class ShopScreen extends Screen {
 
     private ShopCategory category = ShopCategory.GUNS;
     private final Sel sel = new Sel();
-    /** 枪械栏子分类筛选（null = 全部） */
-    private GunType gunFilter;
+    /** 子分类筛选（null = 取目录中第一个真实子分类；枪械栏 / 装备栏共用） */
+    private ShopSubtype subFilter;
     /** 双击判定：上次点击的格标识与时间 */
     private String lastClickKey = "";
     private long lastClickAt;
@@ -181,22 +186,38 @@ public final class ShopScreen extends Screen {
         return marketY() + MARKET_H - 5 - marketViewY();
     }
 
-    // ===== 子分类筛选条（枪械栏） =====
+    // ===== 子分类筛选条（枪械栏 / 装备栏） =====
+
+    /** 该分类是否带子分类筛选条 */
+    private static boolean hasSubtypes(ShopCategory category) {
+        return category == ShopCategory.GUNS || category == ShopCategory.EQUIPMENT;
+    }
+
+    /** 按分类还原子分类枚举（传输序 → 枚举；无子分类的分类返回 null） */
+    private static ShopSubtype subtypeOf(ShopCategory category, int ordinal) {
+        if (category == ShopCategory.GUNS) {
+            return GunType.byOrdinal(ordinal);
+        }
+        if (category == ShopCategory.EQUIPMENT) {
+            return EquipType.byOrdinal(ordinal);
+        }
+        return null;
+    }
 
     /** 筛选条按钮（顺序：目录中实际存在的子分类；超出宽度自动折行） */
     private List<Chip> chips() {
         List<Chip> list = new ArrayList<>();
-        if (category != ShopCategory.GUNS) {
+        if (!hasSubtypes(category)) {
             return list;
         }
-        List<GunType> ordered = gunChips();
+        List<ShopSubtype> ordered = subChips();
         if (ordered.isEmpty()) {
             return list;
         }
         int maxX = midX() + MID_W - 5;
         int x = marketViewX();
         int cy = chipTop();
-        for (GunType type : ordered) {
+        for (ShopSubtype type : ordered) {
             int w = tw(chipLabel(type)) + 8;
             if (x + w > maxX && x > marketViewX()) {
                 x = marketViewX();
@@ -208,12 +229,12 @@ public final class ShopScreen extends Screen {
         return list;
     }
 
-    /** 当前生效的枪械子分类（未选择时取目录中第一个真实子分类，不再有「全部」档） */
-    private GunType gunFilter() {
-        if (gunFilter != null) {
-            return gunFilter;
+    /** 当前生效的子分类（未选择时取目录中第一个真实子分类，不再有「全部」档） */
+    private ShopSubtype activeFilter() {
+        if (subFilter != null) {
+            return subFilter;
         }
-        List<GunType> types = gunChips();
+        List<ShopSubtype> types = subChips();
         return types.isEmpty() ? null : types.get(0);
     }
 
@@ -234,11 +255,11 @@ public final class ShopScreen extends Screen {
         return marketY() + MARKET_HEAD - 1;
     }
 
-    /** 目录中实际出现过的枪械子分类（按枚举顺序，只列有货的） */
-    private static List<GunType> gunChips() {
-        List<GunType> list = new ArrayList<>();
-        for (ShopDataPayload.Entry entry : ClientShopData.entriesOf(ShopCategory.GUNS)) {
-            GunType type = GunType.byOrdinal(entry.subtype());
+    /** 当前分类目录中实际出现过的子分类（按枚举顺序，只列有货的） */
+    private List<ShopSubtype> subChips() {
+        List<ShopSubtype> list = new ArrayList<>();
+        for (ShopDataPayload.Entry entry : ClientShopData.entriesOf(category)) {
+            ShopSubtype type = subtypeOf(category, entry.subtype());
             if (type != null && !list.contains(type)) {
                 list.add(type);
             }
@@ -246,12 +267,12 @@ public final class ShopScreen extends Screen {
         return list;
     }
 
-    private static Component chipLabel(GunType type) {
+    private static Component chipLabel(ShopSubtype type) {
         return Component.translatable(type.getLangKey());
     }
 
     private void drawChips(GuiGraphics g, int mouseX, int mouseY) {
-        GunType activeType = gunFilter();
+        ShopSubtype activeType = activeFilter();
         for (Chip chip : chips()) {
             boolean active = chip.type() == activeType;
             boolean hover = hit(mouseX, mouseY, chip.x(), chip.y(), chip.w(), CHIP_H);
@@ -265,13 +286,13 @@ public final class ShopScreen extends Screen {
     }
 
     /** 筛选条按钮矩形（绘制与命中判定共用，避免漂移） */
-    private record Chip(GunType type, int x, int y, int w) {
+    private record Chip(ShopSubtype type, int x, int y, int w) {
     }
 
-    /** 当前分类的可见商品（枪械栏按子分类筛选） */
+    /** 当前分类的可见商品（枪械栏 / 装备栏按子分类筛选） */
     private List<ShopDataPayload.Entry> visibleItems() {
         List<ShopDataPayload.Entry> all = ClientShopData.entriesOf(category);
-        GunType filter = category == ShopCategory.GUNS ? gunFilter() : null;
+        ShopSubtype filter = hasSubtypes(category) ? activeFilter() : null;
         if (filter == null) {
             return all;
         }
@@ -857,6 +878,7 @@ public final class ShopScreen extends Screen {
             case TAKE -> Component.translatable("msb.shop.result.taken", name, payload.count());
             case STORE -> Component.translatable("msb.shop.result.stored", name, payload.count());
             case SWAP_HOTBAR -> Component.translatable("msb.shop.result.swapped", name, payload.count());
+            case EQUIP -> Component.translatable("msb.shop.result.equipped", name);
         };
     }
 
@@ -917,17 +939,17 @@ public final class ShopScreen extends Screen {
             for (ShopCategory value : ShopCategory.values()) {
                 if (hit(mx, my, leftX(), cy, LEFT_W - 4, SLOT)) {
                     category = value;
-                    gunFilter = null;
+                    subFilter = null;
                     marketScroll = 0;
                     clearSelection();
                     return true;
                 }
                 cy += SLOT + SLOT_GAP;
             }
-            // 子分类筛选条（仅枪械栏）
+            // 子分类筛选条（枪械栏 / 装备栏）
             for (Chip chip : chips()) {
                 if (hit(mx, my, chip.x(), chip.y(), chip.w(), CHIP_H)) {
-                    gunFilter = chip.type();
+                    subFilter = chip.type();
                     marketScroll = 0;
                     return true;
                 }
@@ -978,10 +1000,14 @@ public final class ShopScreen extends Screen {
             } else if (ctrl) {                                  // Ctrl+左键：整组取出（该物品全部堆叠）
                 selectStorage(i, stack);
                 takeAll(stack.item());
-            } else {                                            // 左键：单击选中、双击取出（自动入包）
+            } else {                                            // 左键：单击选中、双击装备（可装备）或取出（自动入包）
                 selectStorage(i, stack);
                 if (isDoubleClick("storage:" + i)) {
-                    send(ShopTradePayload.Action.TAKE, ShopTradePayload.Zone.STORAGE, i, stack.item(), stack.count());
+                    if (equippable(ClientShopData.stack(stack.item()))) {
+                        send(ShopTradePayload.Action.EQUIP, ShopTradePayload.Zone.STORAGE, i, stack.item(), 1);
+                    } else {
+                        send(ShopTradePayload.Action.TAKE, ShopTradePayload.Zone.STORAGE, i, stack.item(), stack.count());
+                    }
                 }
             }
             return true;
@@ -1040,8 +1066,25 @@ public final class ShopScreen extends Screen {
         if (ctrl) {
             storeAll(itemIdOf(stack));
         } else if (isDoubleClick("player:" + zone + ":" + slot)) {
-            send(ShopTradePayload.Action.STORE, zone, slot, itemIdOf(stack), stack.getCount());
+            // 可装备物品（护甲 / 饰品）：双击自动装备到对应槽位；否则存入储存格
+            if (equippable(stack)) {
+                send(ShopTradePayload.Action.EQUIP, zone, slot, itemIdOf(stack), 1);
+            } else {
+                send(ShopTradePayload.Action.STORE, zone, slot, itemIdOf(stack), stack.getCount());
+            }
         }
+    }
+
+    /** 该物品是否可装备（原版护甲 → 护甲槽；饰品如降落伞 → Curios 槽） */
+    private static boolean equippable(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return false;
+        }
+        if (stack.getItem() instanceof ArmorItem) {
+            return true;
+        }
+        Player player = Minecraft.getInstance().player;
+        return player != null && !CuriosApi.getItemStackSlots(stack, player).isEmpty();
     }
 
     /** Ctrl+左键：取出储存格中该物品的全部堆叠（逐堆请求，服务端各自校验） */

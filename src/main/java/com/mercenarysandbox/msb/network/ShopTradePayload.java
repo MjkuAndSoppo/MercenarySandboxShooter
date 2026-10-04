@@ -20,9 +20,10 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record ShopTradePayload(Action action, Zone zone, int slot, ResourceLocation item, int count)
         implements CustomPacketPayload {
 
-    /** BUY 忽略 zone/slot；SELL/TAKE 的 zone 指向来源；SWAP_HOTBAR 交换「zone/slot」与快捷栏 count 格 */
+    /** BUY 忽略 zone/slot；SELL/TAKE/EQUIP 的 zone 指向来源；SWAP_HOTBAR 交换「zone/slot」与快捷栏 count 格 */
     public enum Action {
-        BUY, SELL, TAKE, STORE, SWAP_HOTBAR
+        BUY, SELL, TAKE, STORE, SWAP_HOTBAR, /** 双击装备：护甲→原版护甲槽 / 饰品→Curios 对应槽，替换物入储存格 */
+        EQUIP
     }
 
     /** 来源/目标区：储存格 + 玩家栏四区 */

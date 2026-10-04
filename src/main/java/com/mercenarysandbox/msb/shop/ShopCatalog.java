@@ -67,7 +67,7 @@ public final class ShopCatalog extends SimpleJsonResourceReloadListener {
         if (entry != null) {
             return entry;
         }
-        return new ShopEntry(item, ShopCategory.UTILITY, null, null,
+        return new ShopEntry(item, ShopCategory.EQUIPMENT, null, null,
                 Config.SHOP_DEFAULT_PRICE.get(), -1, Config.SHOP_DEFAULT_WEIGHT.get());
     }
 
@@ -144,16 +144,17 @@ public final class ShopCatalog extends SimpleJsonResourceReloadListener {
                     return;
                 }
             }
-            // 枪械子分类（仅枪械栏需要；缺失时归入「全部」）
-            GunType subtype = null;
+            // 子分类（枪械栏用 GunType、装备栏用 EquipType；缺失时归入未分类）
+            ShopSubtype subtype = null;
             if (json.has("subtype")) {
-                subtype = GunType.byId(json.get("subtype").getAsString());
+                String raw = json.get("subtype").getAsString();
+                subtype = category == ShopCategory.EQUIPMENT ? EquipType.byId(raw) : GunType.byId(raw);
                 if (subtype == null) {
                     MercenarySandboxShooter.LOGGER.warn("MSB shop: item '{}' has unknown subtype, skipped", item);
                     return;
                 }
-            } else if (category == ShopCategory.GUNS) {
-                MercenarySandboxShooter.LOGGER.warn("MSB shop: gun '{}' has no subtype (only visible under 'All')", item);
+            } else if (category == ShopCategory.GUNS || category == ShopCategory.EQUIPMENT) {
+                MercenarySandboxShooter.LOGGER.warn("MSB shop: item '{}' has no subtype (not listed under any chip)", item);
             }
             ShopEntry entry = new ShopEntry(item, category, faction, subtype, price, sell, weight);
             byItem.put(item, entry);

@@ -122,13 +122,13 @@ public final class ClientShopData {
                 }
             }
         }
-        return new ShopDataPayload.Entry(item, ShopCategory.UTILITY.ordinal(), -1,
+        return new ShopDataPayload.Entry(item, ShopCategory.EQUIPMENT.ordinal(), -1,
                 Config.SHOP_DEFAULT_PRICE.get(), -1, Config.SHOP_DEFAULT_WEIGHT.get(), true);
     }
 
     public static ShopCategory categoryOf(ShopDataPayload.Entry entry) {
         ShopCategory[] values = ShopCategory.values();
-        return entry.category() >= 0 && entry.category() < values.length ? values[entry.category()] : ShopCategory.UTILITY;
+        return entry.category() >= 0 && entry.category() < values.length ? values[entry.category()] : ShopCategory.EQUIPMENT;
     }
 
     /** 展示用 ItemStack（缓存，不修改） */

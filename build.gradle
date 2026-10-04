@@ -31,6 +31,11 @@ repositories {
         name = 'Modrinth'
         url = 'https://api.modrinth.com/maven'
     }
+    // Curios API（编译期仅用 :api 构件）
+    maven {
+        name = 'Illusive Soulworks maven'
+        url = 'https://maven.theillusivec4.top/'
+    }
 }
 
 base {
@@ -110,6 +115,9 @@ dependencies {
 
     // Hard dependencies (MercenarySandboxShooter 是 SuperbWarfare 的必要附属模组)
     implementation "maven.modrinth:superb-warfare:${sbw_version}"
+
+    // Curios API：编译期只依赖公开 :api 构件（运行时由 SBW JarJar 内嵌的 curios 提供）
+    compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"
 
     // GeckoLib 不单独声明：SBW 0.8.9.1-final 已通过 JarJar 内嵌 geckolib-neoforge-1.21.1-4.7.5，
     // 且 Modrinth maven 对同版本号多加载器文件无法区分（4.9.3 会解析到 Fabric 版），

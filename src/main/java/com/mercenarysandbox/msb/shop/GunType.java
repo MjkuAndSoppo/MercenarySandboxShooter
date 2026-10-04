@@ -4,7 +4,7 @@ package com.mercenarysandbox.msb.shop;
  * 枪械子分类（{@link ShopCategory#GUNS} 栏目内的筛选维度；datapack 字段 {@code subtype}）。
  * 语言键 {@code msb.shop.gun.<id>}。筛选条只展示当前目录里实际存在的子分类。
  */
-public enum GunType {
+public enum GunType implements ShopSubtype {
     HANDGUN("handgun"),
     SMG("smg"),
     RIFLE("rifle"),
@@ -21,10 +21,12 @@ public enum GunType {
         this.id = id;
     }
 
+    @Override
     public String getId() {
         return id;
     }
 
+    @Override
     public String getLangKey() {
         return "msb.shop.gun." + id;
     }

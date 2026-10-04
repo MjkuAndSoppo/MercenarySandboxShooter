@@ -18,7 +18,9 @@ public enum ShopCode {
     BAD_COUNT,
     NO_CATALOG,
     /** 荣誉点不足（荣誉商店专用） */
-    NO_HONOR;
+    NO_HONOR,
+    /** 目标物品不可装备到任何槽位（双击装备专用） */
+    NOT_EQUIPPABLE;
 
     public String getLangKey() {
         return "msb.shop.error." + name().toLowerCase(Locale.ROOT);
