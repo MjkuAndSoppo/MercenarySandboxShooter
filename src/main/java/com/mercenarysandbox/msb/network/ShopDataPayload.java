@@ -26,8 +26,10 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record ShopDataPayload(List<Entry> entries, double sellRatio, double refundRate, int storageSlots,
         int honorPoints) implements CustomPacketPayload {
 
-    /** 传输条目（category 为枚举序，客户端按序映射语言键） */
-    public record Entry(ResourceLocation item, int category, int price, int sell, double weight) {
+    /** 传输条目（category/subtype 为枚举序，客户端按序映射语言键；subtype -1 = 未分类）。
+     * {@code visible} = 该条目是否对本玩家可见（阵营专属装备仅本阵营可见；不可见条目仍下发用于正确的卖价显示） */
+    public record Entry(ResourceLocation item, int category, int subtype, int price, int sell, double weight,
+            boolean visible) {
     }
 
     public static final Type<ShopDataPayload> TYPE =
@@ -39,9 +41,11 @@ public record ShopDataPayload(List<Entry> entries, double sellRatio, double refu
                 for (Entry e : p.entries()) {
                     ResourceLocation.STREAM_CODEC.encode(buf, e.item());
                     buf.writeVarInt(e.category());
+                    buf.writeVarInt(e.subtype() + 1);          // 0 = 未分类（varint 不便写负数）
                     buf.writeVarInt(e.price());
                     buf.writeVarInt(e.sell());
                     buf.writeFloat((float) e.weight());
+                    buf.writeBoolean(e.visible());
                 }
                 buf.writeDouble(p.sellRatio());
                 buf.writeDouble(p.refundRate());
@@ -54,7 +58,8 @@ public record ShopDataPayload(List<Entry> entries, double sellRatio, double refu
                 for (int i = 0; i < size; i++) {
                     list.add(new Entry(
                             ResourceLocation.STREAM_CODEC.decode(buf),
-                            buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readFloat()));
+                            buf.readVarInt(), buf.readVarInt() - 1, buf.readVarInt(), buf.readVarInt(),
+                            buf.readFloat(), buf.readBoolean()));
                 }
                 return new ShopDataPayload(list, buf.readDouble(), buf.readDouble(),
                         buf.readVarInt(), buf.readVarInt());
@@ -65,15 +70,18 @@ public record ShopDataPayload(List<Entry> entries, double sellRatio, double refu
         return TYPE;
     }
 
-    /** 服务端组包：按玩家阵营过滤的目录快照 + 配置系数 + 本人荣誉点 */
+    /**
+     * 服务端组包：下发全部条目（带 {@code visible} 可见性标记，购买列表按标记过滤，
+     * 但卖价/负重等口径使用全集，避免「拾到敌方阵营装备查不到条目→无法出售」）
+     * + 配置系数 + 本人荣誉点。
+     */
     public static ShopDataPayload from(ShopCatalog catalog, ServerPlayer player) {
         Faction viewer = FactionManager.getPlayerFaction(player);
         List<Entry> list = new ArrayList<>();
         for (ShopEntry e : catalog.all()) {
-            if (!e.visibleTo(viewer)) {
-                continue;                       // 阵营专属装备：仅本阵营可见
-            }
-            list.add(new Entry(e.item(), e.category().ordinal(), e.price(), e.sell(), e.weight()));
+            list.add(new Entry(e.item(), e.category().ordinal(),
+                    e.subtype() == null ? -1 : e.subtype().ordinal(), e.price(), e.sell(), e.weight(),
+                    e.visibleTo(viewer)));
         }
         return new ShopDataPayload(list,
                 Config.SHOP_SELL_RATIO.get(), Config.SHOP_REFUND_RATE.get(), Config.SHOP_STORAGE_SLOTS.get(),

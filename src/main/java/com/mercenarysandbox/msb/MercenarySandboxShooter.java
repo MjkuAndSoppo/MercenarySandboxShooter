@@ -43,6 +43,8 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import com.mercenarysandbox.msb.block.BaseBlock;
 import com.mercenarysandbox.msb.client.AiCombatantRenderer;
 import com.mercenarysandbox.msb.entity.AiCombatantEntity;
+import com.mercenarysandbox.msb.item.MercenaryHandbookItem;
+import com.mercenarysandbox.msb.onboarding.MercenaryProfileAttachments;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(MercenarySandboxShooter.MODID)
@@ -78,11 +80,18 @@ public class MercenarySandboxShooter {
     public static final DeferredItem<Item> TEST_ITEM = ITEMS.registerSimpleItem("test_item", new Item.Properties().food(new FoodProperties.Builder()
             .alwaysEdible().nutrition(1).saturationModifier(2f).build()));
 
+    // ===== 雇佣兵手册（开局流程）：无阵营玩家登录自动发放，右键打开阵营选择界面 =====
+    public static final DeferredItem<Item> MERCENARY_HANDBOOK = ITEMS.register("mercenary_handbook",
+            () -> new MercenaryHandbookItem(new Item.Properties()));
+
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> MSB_TAB = CREATIVE_MODE_TABS.register("msb_tab", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.msb"))
             .withTabsBefore(CreativeModeTabs.COMBAT)
             .icon(() -> TEST_ITEM.get().getDefaultInstance())
-            .displayItems((parameters, output) -> output.accept(TEST_ITEM.get())).build());
+            .displayItems((parameters, output) -> {
+                output.accept(TEST_ITEM.get());
+                output.accept(MERCENARY_HANDBOOK.get());
+            }).build());
 
     // ===== AI 战斗单位实体（M1 实体化，docs/02 §3.12）：原版 Steve 外观，无攻击 goal =====
     public static final DeferredHolder<EntityType<?>, EntityType<AiCombatantEntity>> AI_COMBATANT = ENTITIES.register("ai_combatant",
@@ -104,6 +113,8 @@ public class MercenarySandboxShooter {
         com.mercenarysandbox.msb.shop.ShopStorageAttachments.ATTACHMENT_TYPES.register(modEventBus);
         // 荣誉点（独立货币，荣誉商店用）
         com.mercenarysandbox.msb.economy.HonorAttachments.ATTACHMENT_TYPES.register(modEventBus);
+        // 雇佣兵档案（开局资金档位/击杀倍率/AI 数量，copyOnDeath）
+        MercenaryProfileAttachments.ATTACHMENT_TYPES.register(modEventBus);
 
         NeoForge.EVENT_BUS.register(this);
 

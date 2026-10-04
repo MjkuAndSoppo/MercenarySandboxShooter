@@ -16,7 +16,9 @@ public enum ShopCode {
     UNSELLABLE,
     UNKNOWN_ITEM,
     BAD_COUNT,
-    NO_CATALOG;
+    NO_CATALOG,
+    /** 荣誉点不足（荣誉商店专用） */
+    NO_HONOR;
 
     public String getLangKey() {
         return "msb.shop.error." + name().toLowerCase(Locale.ROOT);

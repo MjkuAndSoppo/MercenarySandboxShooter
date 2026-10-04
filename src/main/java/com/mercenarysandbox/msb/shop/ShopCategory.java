@@ -8,8 +8,8 @@ package com.mercenarysandbox.msb.shop;
 public enum ShopCategory {
     /** 阵营商店（置顶）：条目带阵营归属，服务端只下发玩家本阵营的装备 */
     FACTION("faction"),
-    PRIMARY("primary"),
-    SECONDARY("secondary"),
+    /** 枪械（主/副武器合并）：条目用 {@link GunType} 再细分 */
+    GUNS("guns"),
     AMMO("ammo"),
     ARMOR("armor"),
     THROWABLE("throwable"),

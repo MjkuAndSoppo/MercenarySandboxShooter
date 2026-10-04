@@ -15,8 +15,9 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * 负重系统（docs §6）：Σ 目录内物品（玩家栏 = 物品栏/快捷栏/护甲/副手）× 条目负重。
- * 储存格与目录外物品不计重；超 {@code weightWarnRatio}（默认 60%）起线性减速，
+ * 负重系统（docs §6）：Σ 玩家栏物品（物品栏/快捷栏/护甲/副手）× 条目负重。
+ * 储存格不计重；目录外物品按默认条目负重（{@code Config.SHOP_DEFAULT_WEIGHT}，默认 0.01kg）计重。
+ * 超 {@code weightWarnRatio}（默认 60%）起线性减速，
  * 达上限 100% 时移速惩罚到达 {@code weightSpeedPenaltyMax}（默认 -20%），并下调跳跃强度。
  */
 public final class WeightService {
@@ -49,8 +50,9 @@ public final class WeightService {
         if (stack.isEmpty()) {
             return 0.0D;
         }
-        ShopEntry entry = ShopCatalog.INSTANCE.find(BuiltInRegistries.ITEM.getKey(stack.getItem()));
-        return entry == null ? 0.0D : entry.weight() * stack.getCount();
+        // 目录未收录物品按默认条目负重（Config.SHOP_DEFAULT_WEIGHT）计重
+        ShopEntry entry = ShopCatalog.INSTANCE.entryFor(BuiltInRegistries.ITEM.getKey(stack.getItem()));
+        return entry.weight() * stack.getCount();
     }
 
     /** 负重比例（0 = 空载，1 = 达上限） */

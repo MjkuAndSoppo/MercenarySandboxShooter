@@ -12,6 +12,7 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.Container;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.InteractionHand;
@@ -30,6 +31,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 import com.atsuishio.superbwarfare.data.gun.GunData;
 import com.atsuishio.superbwarfare.data.gun.GunProp;
@@ -54,6 +56,8 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     private static final EntityDataAccessor<Integer> DATA_FACTION_ID = SynchedEntityData.defineId(AiCombatantEntity.class, EntityDataSerializers.INT);
     /** 交战瞄准同步键：客户端渲染抬枪姿势（服务端战斗 goal 运行时置位） */
     private static final EntityDataAccessor<Boolean> DATA_AIMING = SynchedEntityData.defineId(AiCombatantEntity.class, EntityDataSerializers.BOOLEAN);
+    /** 开伞状态同步键：客户端渲染层据此绘制伞面（服务端缓降逻辑同时使用） */
+    private static final EntityDataAccessor<Boolean> DATA_PARACHUTE = SynchedEntityData.defineId(AiCombatantEntity.class, EntityDataSerializers.BOOLEAN);
     /** AI 双容器容量：装备容器（初始武器/弹药，掉落受 /MSBS AIpmc drop 控制）与战利品容器（拾取物，始终掉落） */
     private static final int CONTAINER_SIZE = 27;
     /** 枪内虚拟弹药（SBW mob 射击用：非玩家实体无物品栏，靠枪 NBT 供弹，docs/02 §3.12） */
@@ -73,6 +77,30 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     private static final double PICKUP_RADIUS = 5.0D;
     /** 走到掉落物该距离（格）内即收取 */
     private static final double PICKUP_STOP_DISTANCE = 1.5D;
+    /** 圈外推进速度倍率（相对移动速度属性；数值越大进场越快） */
+    private static final double ADVANCE_SPEED = 1.3D;
+    /** 圈内巡逻速度倍率 */
+    private static final double PATROL_SPEED = 0.8D;
+    /** 编队分散黄金角（rad）：把各 AI 的推进/巡逻/跳伞目标均匀错开，形成方阵而非单列 */
+    private static final double FORMATION_GOLDEN_ANGLE = Math.PI * (3.0D - Math.sqrt(5.0D));
+    /** 推进时相对圆心的侧向分散半宽（格）：各 AI 走平行车道，不挤在同一条路径上 */
+    private static final double FORMATION_LATERAL = 6.0D;
+
+    /** 降落伞（SBW Curios 背部饰品；AI 无 Curios 背槽，缓降由本类自实现）+ 其在装备容器中的槽位 */
+    private static final ResourceLocation PARACHUTE_ID = ResourceLocation.parse("superbwarfare:parachute");
+    private static final int SLOT_PARACHUTE = 3;
+    /** 开伞判定：垂直速度阈值（格/tick）与最小下落距离（格），对齐 SBW 伞的服务端校验 */
+    private static final double PARACHUTE_OPEN_SPEED = -0.6D;
+    private static final double PARACHUTE_MIN_FALL = 4.0D;
+    /** 缓降数值：垂直速度倍率 / 水平速度倍率 / 沿视线的滑翔推力，对齐 SBW 伞 */
+    private static final double PARACHUTE_FALL_MULTIPLIER = 0.75D;
+    private static final double PARACHUTE_HORIZONTAL_MULTIPLIER = 1.03D;
+    private static final double PARACHUTE_GLIDE_PUSH = 0.05D;
+    /** 空中转向速率（度/tick）与到达该距离内不再修正航线（格） */
+    private static final float PARACHUTE_TURN_SPEED = 10.0F;
+    private static final double PARACHUTE_STEER_RANGE = 4.0D;
+    /** 开伞期间耐久磨损间隔（tick，对齐 SBW 伞的 40 tick / 1 点） */
+    private static final int PARACHUTE_WEAR_INTERVAL = 40;
 
     /** 装备容器：初始副武器 + 弹药（掉落受 /MSBS AIpmc drop 控制） */
     private final SimpleContainer equipment = new SimpleContainer(CONTAINER_SIZE);
@@ -80,11 +108,23 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     private final SimpleContainer loot = new SimpleContainer(CONTAINER_SIZE);
     /** 圈内巡逻换点倒计时（lazyTick 调用次数；每 4 tick 一次调用，60 ≈ 12s） */
     private int patrolCooldown;
+    /** 降落伞是否已开伞（服务端状态，落地自动收伞） */
+    private boolean parachuteOpen;
+    /** 开伞期间耐久磨损计时 */
+    private int parachuteWearTimer;
+    /** 空中机动目标（按编队种子取的控制区内分散落点，AiManager 每 4 tick 下发；开伞时据此转向滑翔） */
+    private BlockPos glideTarget;
+    /** 本条命击杀数（被击杀时决定给击杀者的赏金档位；AI 复活即新实体，天然清零） */
+    private int killCount;
+    /** 编队种子（AiManager 按阵营内序号下发）：决定该 AI 的分散目标方向，使各 AI 路径目标互不相同 */
+    private int formationSeed;
 
     public AiCombatantEntity(EntityType<? extends AiCombatantEntity> type, Level level) {
         super(type, level);
         // 永久存在：不自然消失，生命周期由 AiManager 顶替/补位/击杀清理管理
         setPersistenceRequired();
+        // 初始巡逻换点错峰：避免所有 AI 在同一 tick 一起改目标
+        this.patrolCooldown = getRandom().nextInt(40);
         if (!level.isClientSide) {
             registerCombatGoals();
         }
@@ -124,6 +164,7 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
         super.defineSynchedData(builder);
         builder.define(DATA_FACTION_ID, Faction.NONE.getId());
         builder.define(DATA_AIMING, false);
+        builder.define(DATA_PARACHUTE, false);
     }
 
     /** 是否处于交战瞄准状态（渲染抬枪姿势用；服务端写入、客户端读取） */
@@ -133,6 +174,20 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
 
     public void setAiming(boolean aiming) {
         this.entityData.set(DATA_AIMING, aiming);
+    }
+
+    /** 是否已开伞（渲染伞面用；服务端写入、客户端读取） */
+    public boolean isParachuteOpen() {
+        return this.entityData.get(DATA_PARACHUTE);
+    }
+
+    /** 开伞状态变更（仅状态翻转时写同步数据，避免每 tick 反复标记脏数据） */
+    private void setParachuteOpen(boolean open) {
+        if (parachuteOpen == open) {
+            return;
+        }
+        parachuteOpen = open;
+        this.entityData.set(DATA_PARACHUTE, open);
     }
 
     public Faction getFaction() {
@@ -153,6 +208,16 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
         this.entityData.set(DATA_FACTION_ID, faction.getId());
     }
 
+    /** 本条命击杀数（击杀结算读取：目标每击杀过一个单位，赏金/经验各多一档） */
+    public int getKillCount() {
+        return killCount;
+    }
+
+    /** 记一次击杀（AI 作为击杀者时由击杀结算调用；复活为新实体后自动归零） */
+    public void registerKill() {
+        killCount++;
+    }
+
     /** 计分板 Team 成员名：用 UUID（与真人玩家名区分，供 addPlayerToTeam/removePlayerFromTeam） */
     @Override
     public String getScoreboardName() {
@@ -161,7 +226,7 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
 
     /**
      * 出生装配（AiManager.spawnUnit 调用）：主手 SBW 枪械 + 枪内虚拟弹药（mob 射击供弹），
-     * 装备容器放副武器（带弹）+ 弹药（掉落受 /MSBS AIpmc drop 控制；主武器只在主手、避免重复掉落）。
+     * 装备容器放副武器（带弹）+ 弹药 + 降落伞（掉落受 /MSBS AIpmc drop 控制；主武器只在主手、避免重复掉落）。
      */
     public void equipLoadout() {
         String gunId = switch (getFaction()) {
@@ -174,6 +239,7 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
         equipment.setItem(0, createGun(GUN_ID_SIDEARM));
         equipment.setItem(1, createAmmo(AMMO_ID_HANDGUN, 32));
         equipment.setItem(2, createAmmo(AMMO_ID_RIFLE, 64));
+        equipment.setItem(SLOT_PARACHUTE, new ItemStack(BuiltInRegistries.ITEM.get(PARACHUTE_ID)));
     }
 
     /** 生成一叠弹药物品（SBW AmmoSupplierItem，玩家搜刮后可直接装填） */
@@ -205,10 +271,155 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     }
 
     /**
+     * 每 tick 缓降推进（服务端）：SBW 的降落伞是 Curios 背部饰品，而 Curios 只给 player 开了槽位，
+     * AI 实体没有背槽、原版伞逻辑不会触发，故在 MSB 侧按同一套数值自实现（仅引用公开注册名，不复制 SBW 代码）。
+     */
+    @Override
+    public void aiStep() {
+        super.aiStep();
+        if (!level().isClientSide) {
+            tickParachute();
+        }
+    }
+
+    /**
+     * 降落伞缓降：装备容器内有降落伞且垂直速度 < -0.6、已下落 > 4 格时自动开伞；
+     * 开伞期间压低垂直下落速度、沿视线水平方向滑翔并免疫摔落伤害，落地自动收伞可重复使用；
+     * 每 40 tick 磨损 1 点耐久，耐久耗尽后伞损毁、失去缓降能力。
+     */
+    private void tickParachute() {
+        ItemStack chute = equipment.getItem(SLOT_PARACHUTE);
+        if (!isParachute(chute) || onGround()) {
+            setParachuteOpen(false);
+            parachuteWearTimer = 0;
+            return;
+        }
+        Vec3 movement = getDeltaMovement();
+        if (!parachuteOpen) {
+            if (movement.y < PARACHUTE_OPEN_SPEED && fallDistance > PARACHUTE_MIN_FALL) {
+                setParachuteOpen(true);
+                parachuteWearTimer = 0;
+            }
+            return;
+        }
+        setDeltaMovement(movement.multiply(PARACHUTE_HORIZONTAL_MULTIPLIER, PARACHUTE_FALL_MULTIPLIER,
+                PARACHUTE_HORIZONTAL_MULTIPLIER));
+        Vec3 steer = glideDirection();
+        if (steer != null) {
+            // 空中操控：朝机动目标转向并沿该方向滑翔
+            push(steer.x * PARACHUTE_GLIDE_PUSH, 0.0D, steer.z * PARACHUTE_GLIDE_PUSH);
+        } else {
+            // 已接近目标或无机动目标：沿视线方向滑翔（与 SBW 伞的玩家操控一致）
+            Vec3 look = getLookAngle();
+            Vec3 horizontal = new Vec3(look.x, 0.0D, look.z);
+            if (horizontal.lengthSqr() > 1.0E-4D) {
+                horizontal = horizontal.normalize().scale(PARACHUTE_GLIDE_PUSH);
+                push(horizontal.x, 0.0D, horizontal.z);
+            }
+        }
+        resetFallDistance();
+        if (++parachuteWearTimer >= PARACHUTE_WEAR_INTERVAL) {
+            parachuteWearTimer = 0;
+            int damage = chute.getDamageValue() + 1;
+            if (damage >= chute.getMaxDamage()) {
+                equipment.setItem(SLOT_PARACHUTE, ItemStack.EMPTY);
+                setParachuteOpen(false);
+            } else {
+                chute.setDamageValue(damage);
+            }
+        }
+    }
+
+    /** 是否为 SBW 降落伞（按公开注册名判定） */
+    private static boolean isParachute(ItemStack stack) {
+        return !stack.isEmpty() && stack.is(BuiltInRegistries.ITEM.get(PARACHUTE_ID));
+    }
+
+    /**
+     * 空中操控：开伞期间把身体（yRot/yBodyRot/yHeadRot 一并写，服务端权威）朝机动目标缓慢转向，
+     * 并返回该方向的水平单位向量（无向量 = 不再修正航线）。
+     * 距目标 {@link #PARACHUTE_STEER_RANGE} 格内或无机动目标时返回 null，交由调用方沿用视线方向。
+     */
+    private Vec3 glideDirection() {
+        BlockPos target = glideTarget;
+        if (target == null) {
+            return null;
+        }
+        double dx = target.getX() + 0.5D - getX();
+        double dz = target.getZ() + 0.5D - getZ();
+        double distSqr = dx * dx + dz * dz;
+        if (distSqr < PARACHUTE_STEER_RANGE * PARACHUTE_STEER_RANGE) {
+            return null;
+        }
+        float wanted = (float) (Mth.atan2(dz, dx) * (180.0D / Math.PI)) - 90.0F;
+        float yaw = Mth.approachDegrees(getYRot(), wanted, PARACHUTE_TURN_SPEED);
+        setYRot(yaw);
+        setYBodyRot(yaw);
+        yHeadRot = yaw;
+        double dist = Math.sqrt(distSqr);
+        return new Vec3(dx / dist, 0.0D, dz / dist);
+    }
+
+    /** 编队种子（AiManager 按阵营内序号下发）：决定该 AI 的分散目标方向 */
+    public void setFormationSeed(int seed) {
+        this.formationSeed = seed;
+    }
+
+    /** 由编队种子导出的稳定伪随机数 [0,1)，用于在各自扇区内错开目标 */
+    private double formationRand() {
+        double v = (formationSeed * 0.6180339887498949D) % 1.0D;
+        return v < 0.0D ? v + 1.0D : v;
+    }
+
+    /** 编队分散角：编队种子 × 黄金角（同阵营内均匀错开），再按阵营加 120° 偏移（跨阵营也错开） */
+    private double formationAngle() {
+        return formationSeed * FORMATION_GOLDEN_ANGLE + getFaction().getId() * (Math.PI * 2.0D / 3.0D);
+    }
+
+    /**
+     * 圈外推进目标：朝控制区中心前进，但按编队种子做垂直来向的侧向偏移，
+     * 使各 AI 走不同车道、成方阵推进而非挤在同一条路径上。
+     */
+    private Vec3 advanceTarget(BlockPos center) {
+        double dx = center.getX() + 0.5D - getX();
+        double dz = center.getZ() + 0.5D - getZ();
+        double len = Math.sqrt(dx * dx + dz * dz);
+        if (len < 1.0E-4D) {
+            return new Vec3(center.getX() + 0.5D, center.getY(), center.getZ() + 0.5D);
+        }
+        double ux = dx / len;
+        double uz = dz / len;
+        double lateral = (formationRand() * 2.0D - 1.0D) * FORMATION_LATERAL;
+        return new Vec3(center.getX() + 0.5D - uz * lateral, center.getY(), center.getZ() + 0.5D + ux * lateral);
+    }
+
+    /**
+     * 圈内巡逻目标：在整个控制区范围内随机换点，但以编队种子所在扇区为中心做小角度抖动，
+     * 保证各 AI 目标互不相同（方阵铺开）。
+     */
+    private Vec3 patrolTarget(BlockPos center, int radius) {
+        double angle = formationAngle() + (getRandom().nextDouble() - 0.5D) * 1.2D;
+        double dist = radius * (0.25D + getRandom().nextDouble() * 0.7D);
+        return new Vec3(center.getX() + 0.5D + Math.cos(angle) * dist,
+                center.getY(), center.getZ() + 0.5D + Math.sin(angle) * dist);
+    }
+
+    /** 跳伞降落目标：按编队种子取稳定的分散落点，使各 AI 航线互不相同 */
+    private Vec3 glideLandingTarget(BlockPos center, int radius) {
+        double angle = formationAngle();
+        double dist = radius * (0.2D + formationRand() * 0.6D);
+        return new Vec3(center.getX() + 0.5D + Math.cos(angle) * dist,
+                center.getY(), center.getZ() + 0.5D + Math.sin(angle) * dist);
+    }
+
+    /**
      * 惰性推进（docs/02 §3.12 低频决策约束）：由 AiManager 每 4 tick 调用一次。
-     * 无攻击目标 → 圈外朝圆心移动、圈内停止；有目标 → 交给战斗 goal（GunShootGoal 负责逼近/开火）。
+     * 无攻击目标 → 圈外按编队车道推进、圈内全范围分散巡逻；有目标 → 交给战斗 goal（负责逼近/开火）。
      */
     public void lazyTick(BlockPos zoneCenter, int radius) {
+        // 缓存机动目标：空中开伞时据此滑翔（按编队种子取分散落点，航线互不相同）
+        Vec3 landing = glideLandingTarget(zoneCenter, radius);
+        this.glideTarget = BlockPos.containing(landing.x, landing.y, landing.z);
         if (isRemoved() || isDeadOrDying() || getTarget() != null) {
             return;
         }
@@ -220,11 +431,12 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
         double dz = zoneCenter.getZ() + 0.5D - getZ();
         boolean inZone = dx * dx + dz * dz <= (double) radius * radius;
         if (!inZone) {
-            // 圈外：朝控制区推进
-            getNavigation().moveTo(zoneCenter.getX() + 0.5D, zoneCenter.getY(), zoneCenter.getZ() + 0.5D, 0.8D);
+            // 圈外：按编队车道朝控制区加速推进
+            Vec3 target = advanceTarget(zoneCenter);
+            getNavigation().moveTo(target.x, target.y, target.z, ADVANCE_SPEED);
             return;
         }
-        // 圈内自由巡逻：到达当前目标点后隔一段时间随机换一个圈内点漫游
+        // 圈内自由巡逻：到达当前目标点后隔一段时间换一个分散点在整片控制区漫游
         if (!getNavigation().isDone()) {
             return;
         }
@@ -232,12 +444,9 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
             patrolCooldown--;
             return;
         }
-        patrolCooldown = 60 + getRandom().nextInt(60);
-        double angle = getRandom().nextDouble() * Math.PI * 2.0D;
-        double dist = getRandom().nextDouble() * radius * 0.8D;
-        double tx = zoneCenter.getX() + 0.5D + Math.cos(angle) * dist;
-        double tz = zoneCenter.getZ() + 0.5D + Math.sin(angle) * dist;
-        getNavigation().moveTo(tx, zoneCenter.getY(), tz, 0.6D);
+        patrolCooldown = 40 + getRandom().nextInt(40);
+        Vec3 target = patrolTarget(zoneCenter, radius);
+        getNavigation().moveTo(target.x, target.y, target.z, PATROL_SPEED);
     }
 
     /**

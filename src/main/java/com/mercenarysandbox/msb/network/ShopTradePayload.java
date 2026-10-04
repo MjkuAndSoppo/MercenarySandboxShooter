@@ -11,26 +11,18 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * C2S 交易/转移请求（docs §3）：动作 + 来源区 + 槽位 + 目标槽位 + 物品 + 件数。
+ * C2S 交易/转移请求（docs §3）：动作 + 来源区 + 槽位 + 物品 + 件数。
  * <b>不携带价格</b>——服务端以自持目录查价（防改包），并校验槽位内物品与 itemId 一致。
  *
- * @param slot       来源槽位（BUY 忽略）
- * @param targetSlot TAKE 的目标背包格（0-8 快捷栏 / 9-35 物品栏；-1 = 自动入包）
+ * @param slot 来源槽位（BUY 忽略）；TAKE 一律自动入包（无精确落点）；
+ *             SWAP_HOTBAR 为来源槽位，此时 {@code count} 表示目标快捷栏下标（0..8）
  */
-public record ShopTradePayload(Action action, Zone zone, int slot, int targetSlot, ResourceLocation item, int count)
+public record ShopTradePayload(Action action, Zone zone, int slot, ResourceLocation item, int count)
         implements CustomPacketPayload {
 
-    /** 目标槽位缺省（自动入包） */
-    public static final int TARGET_AUTO = -1;
-
-    /** 便捷构造：不带精确落点（服务端自动入包） */
-    public ShopTradePayload(Action action, Zone zone, int slot, ResourceLocation item, int count) {
-        this(action, zone, slot, TARGET_AUTO, item, count);
-    }
-
-    /** BUY 忽略 zone/slot；SELL/TAKE 的 zone 指向来源 */
+    /** BUY 忽略 zone/slot；SELL/TAKE 的 zone 指向来源；SWAP_HOTBAR 交换「zone/slot」与快捷栏 count 格 */
     public enum Action {
-        BUY, SELL, TAKE, STORE
+        BUY, SELL, TAKE, STORE, SWAP_HOTBAR
     }
 
     /** 来源/目标区：储存格 + 玩家栏四区 */
@@ -46,14 +38,12 @@ public record ShopTradePayload(Action action, Zone zone, int slot, int targetSlo
                 buf.writeVarInt(p.action().ordinal());
                 buf.writeVarInt(p.zone().ordinal());
                 buf.writeVarInt(p.slot());
-                buf.writeVarInt(p.targetSlot());
                 ResourceLocation.STREAM_CODEC.encode(buf, p.item());
                 buf.writeVarInt(p.count());
             },
             buf -> new ShopTradePayload(
                     byteToEnum(Action.values(), buf.readVarInt(), Action.BUY),
                     byteToEnum(Zone.values(), buf.readVarInt(), Zone.STORAGE),
-                    buf.readVarInt(),
                     buf.readVarInt(),
                     ResourceLocation.STREAM_CODEC.decode(buf),
                     buf.readVarInt()));

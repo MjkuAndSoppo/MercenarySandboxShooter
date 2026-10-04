@@ -10,6 +10,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.mercenarysandbox.msb.Config;
 import com.mercenarysandbox.msb.MercenarySandboxShooter;
 import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.network.ShopDataPayload;
@@ -55,6 +56,19 @@ public final class ShopCatalog extends SimpleJsonResourceReloadListener {
     /** 按物品注册名查条目；未收录返回 null */
     public ShopEntry find(ResourceLocation item) {
         return byItem.get(item);
+    }
+
+    /**
+     * 查询（含默认兜底）：目录未收录的物品按 {@code Config.SHOP_DEFAULT_PRICE / SHOP_DEFAULT_WEIGHT} 合成默认条目。
+     * 默认条目仅用于出售/估值/负重口径，<b>不进入</b> {@link #all()} 等列表，不会出现在商店购买页。
+     */
+    public ShopEntry entryFor(ResourceLocation item) {
+        ShopEntry entry = byItem.get(item);
+        if (entry != null) {
+            return entry;
+        }
+        return new ShopEntry(item, ShopCategory.UTILITY, null, null,
+                Config.SHOP_DEFAULT_PRICE.get(), -1, Config.SHOP_DEFAULT_WEIGHT.get());
     }
 
     public List<ShopEntry> byCategory(ShopCategory category) {
@@ -130,7 +144,18 @@ public final class ShopCatalog extends SimpleJsonResourceReloadListener {
                     return;
                 }
             }
-            ShopEntry entry = new ShopEntry(item, category, faction, price, sell, weight);
+            // 枪械子分类（仅枪械栏需要；缺失时归入「全部」）
+            GunType subtype = null;
+            if (json.has("subtype")) {
+                subtype = GunType.byId(json.get("subtype").getAsString());
+                if (subtype == null) {
+                    MercenarySandboxShooter.LOGGER.warn("MSB shop: item '{}' has unknown subtype, skipped", item);
+                    return;
+                }
+            } else if (category == ShopCategory.GUNS) {
+                MercenarySandboxShooter.LOGGER.warn("MSB shop: gun '{}' has no subtype (only visible under 'All')", item);
+            }
+            ShopEntry entry = new ShopEntry(item, category, faction, subtype, price, sell, weight);
             byItem.put(item, entry);
             byCategory.computeIfAbsent(category, k -> new ArrayList<>()).add(entry);
             all.add(entry);

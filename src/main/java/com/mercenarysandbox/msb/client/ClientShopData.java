@@ -97,11 +97,12 @@ public final class ClientShopData {
         return item.equals(flashItem) && System.currentTimeMillis() < flashUntil;
     }
 
+    /** 某分类的「可见」商品（阵营专属装备仅本阵营可见；用于购买列表与子分类筛选） */
     public static List<ShopDataPayload.Entry> entriesOf(ShopCategory category) {
         List<ShopDataPayload.Entry> list = new ArrayList<>();
         if (catalog != null) {
             for (ShopDataPayload.Entry entry : catalog.entries()) {
-                if (entry.category() == category.ordinal()) {
+                if (entry.category() == category.ordinal() && entry.visible()) {
                     list.add(entry);
                 }
             }
@@ -109,16 +110,20 @@ public final class ClientShopData {
         return list;
     }
 
+    /**
+     * 查条目用于卖价/负重口径：返回目录中的真实条目（不受可见性限制），
+     * 目录未收录时合成默认条目（默认价 / 默认负重），使任何物品都能出售。
+     */
     public static ShopDataPayload.Entry entry(ResourceLocation item) {
-        if (catalog == null) {
-            return null;
-        }
-        for (ShopDataPayload.Entry entry : catalog.entries()) {
-            if (entry.item().equals(item)) {
-                return entry;
+        if (catalog != null) {
+            for (ShopDataPayload.Entry entry : catalog.entries()) {
+                if (entry.item().equals(item)) {
+                    return entry;
+                }
             }
         }
-        return null;
+        return new ShopDataPayload.Entry(item, ShopCategory.UTILITY.ordinal(), -1,
+                Config.SHOP_DEFAULT_PRICE.get(), -1, Config.SHOP_DEFAULT_WEIGHT.get(), true);
     }
 
     public static ShopCategory categoryOf(ShopDataPayload.Entry entry) {
@@ -152,29 +157,31 @@ public final class ClientShopData {
 
     /** 储存格可容纳件数（与服务端同口径，仅用于禁用态提示） */
     public static int storageRoom(ResourceLocation item) {
+        int cap = ShopStorage.maxStackOf(item);
         int room = 0;
         for (ShopStoragePayload.Stack s : storage) {
             if (s.item().equals(item)) {
-                room += Math.max(0, ShopStorage.MAX_STACK - s.count());
+                room += Math.max(0, cap - s.count());
             }
         }
-        room += Math.max(0, storageSlots() - storage.size()) * ShopStorage.MAX_STACK;
+        room += Math.max(0, storageSlots() - storage.size()) * cap;
         return room;
     }
 
-    /** 玩家物品栏 + 快捷栏可容纳件数 */
+    /** 玩家物品栏 + 快捷栏可容纳件数（空格按该物品单格上限计） */
     public static int playerRoom(Player player, ResourceLocation item) {
         if (player == null) {
             return 0;
         }
         var inv = player.getInventory();
+        int cap = ShopStorage.maxStackOf(item);
         int room = 0;
         for (int idx = 0; idx < 36; idx++) {
             ItemStack stack = inv.getItem(idx);
             if (stack.isEmpty()) {
-                room += ShopStorage.MAX_STACK;
+                room += cap;
             } else if (BuiltInRegistries.ITEM.getKey(stack.getItem()).equals(item)) {
-                room += Math.max(0, stack.getMaxStackSize() - stack.getCount());
+                room += Math.max(0, Math.min(stack.getMaxStackSize(), ShopStorage.MAX_STACK) - stack.getCount());
             }
         }
         return room;
@@ -203,8 +210,9 @@ public final class ClientShopData {
         if (stack.isEmpty()) {
             return 0.0D;
         }
+        // entry() 对目录外物品返回默认条目（默认负重），保证与服务端同口径
         ShopDataPayload.Entry entry = entry(BuiltInRegistries.ITEM.getKey(stack.getItem()));
-        return entry == null ? 0.0D : entry.weight() * stack.getCount();
+        return entry.weight() * stack.getCount();
     }
 
     public static double weightLimit() {

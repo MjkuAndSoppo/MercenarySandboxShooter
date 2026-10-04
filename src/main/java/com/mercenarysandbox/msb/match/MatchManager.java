@@ -27,6 +27,7 @@ import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.faction.FactionManager;
 import com.mercenarysandbox.msb.network.MatchStatePayload;
 import com.mercenarysandbox.msb.network.UnitPositionsPayload;
+import com.mercenarysandbox.msb.onboarding.FactionSetupData;
 
 /**
  * 对局管理器（服务端单例，按 MinecraftServer 实例隔离）。
@@ -59,6 +60,8 @@ public final class MatchManager {
     private int tickCounter;
     private int unitTickCounter;
     private int baseRegenTick;
+    /** 开局门槛是否已满足（三阵营均确认 AI 数量，或 OP /MSBS game start 强开） */
+    private boolean started;
 
     private MatchManager(MinecraftServer server) {
         this.server = server;
@@ -88,6 +91,8 @@ public final class MatchManager {
         FactionManager.ensureTeams(server.getScoreboard());
         // 恢复持久化的基地坐标（重进存档后安全区仍生效）
         restoreBases();
+        // 开局门槛（docs/02 §3.14）：三阵营均已确认 AI 数量 → 自动开局；否则等待选择完成或 OP /MSBS game start 强开
+        this.started = FactionSetupData.get(server).allChosen();
         // 基地方块不自动放置：由玩家放置 base_block_* 方块动态注册（docs/02 §3.13）
         AiManager.get(server).reconcileAll();
         MercenarySandboxShooter.LOGGER.info("MSB 控制区初始化: 圆心({},{},{}) 半径{} 结算{}s",
@@ -157,6 +162,27 @@ public final class MatchManager {
         return zone;
     }
 
+    /** 开局门槛是否已满足（未满足时控制区不结算、AI 不生成，docs/02 §3.14） */
+    public boolean isStarted() {
+        return started;
+    }
+
+    /**
+     * 开局：激活控制区结算与 AI 生成（docs/02 §3.14）。
+     * 已开局则忽略；重置结算倒计时并立即补齐三方 AI、广播状态，提示全服。
+     */
+    public void startMatch() {
+        if (started) {
+            return;
+        }
+        started = true;
+        countdownTicks = Config.SETTLE_INTERVAL_SECONDS.get() * SECOND_TICKS;
+        AiManager.get(server).reconcileAll();
+        broadcastState();
+        server.getPlayerList().broadcastSystemMessage(Component.translatable("msb.game.started"), false);
+        MercenarySandboxShooter.LOGGER.info("MSB 对局开始：控制区结算与 AI 生成已激活");
+    }
+
     /** 服务端每 tick 驱动：倒计时 + 结算 + 状态广播 + 战术地图单位广播 + 基地载具恢复（AI 惰性驱动见 MsbServerEvents.onServerTick） */
     public void tick() {
         if (zone == null) {
@@ -173,10 +199,13 @@ public final class MatchManager {
         }
         if (tickCounter % SECOND_TICKS == 0) {
             broadcastState();
-            countdownTicks--;
-            if (countdownTicks <= 0) {
-                settle();
-                countdownTicks = Config.SETTLE_INTERVAL_SECONDS.get() * SECOND_TICKS;
+            // 开局门槛未满足时不推进结算倒计时（控制区计分不激活，docs/02 §3.14）
+            if (started) {
+                countdownTicks--;
+                if (countdownTicks <= 0) {
+                    settle();
+                    countdownTicks = Config.SETTLE_INTERVAL_SECONDS.get() * SECOND_TICKS;
+                }
             }
         }
     }

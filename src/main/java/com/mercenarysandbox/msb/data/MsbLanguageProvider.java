@@ -49,7 +49,53 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.hud.settle", "Settle in %s s");
         // 聊天播报
         this.add("msb.chat.settle", "Zone settled:");
-        this.add("msb.chat.ai_replaced", "AI %s replaced by a real player");
+        // 开局流程（雇佣兵手册 / 阵营选择 / 信息栏）
+        this.add("item.msb.mercenary_handbook", "Mercenary Handbook");
+        this.add("key.msb.info", "Info Panel");
+        this.add("msb.handbook.title", "Mercenary Handbook - Choose Faction");
+        this.add("msb.handbook.granted", "Mercenary Handbook granted. Right-click it to choose a faction.");
+        this.add("msb.handbook.funding", "Starting Funds");
+        this.add("msb.handbook.ai_count", "Starting AI Count");
+        this.add("msb.handbook.base", "Base: %s");
+        this.add("msb.handbook.base.ready", "Configured");
+        this.add("msb.handbook.base.none", "No base configured");
+        this.add("msb.handbook.confirm", "Confirm & Join");
+        this.add("msb.handbook.joined_as", "Joined %s");
+        this.add("msb.handbook.tutorial.title", "Field Manual");
+        this.add("msb.handbook.tutorial.line1", "Play tutorial content will be added here.");
+        this.add("msb.handbook.tutorial.line2", "M: Tactical Map | B: Armory | Tab: Info Panel");
+        this.add("msb.handbook.tutorial.line3", "Control Zone: capture and hold to score.");
+        this.add("msb.handbook.tutorial.line4", "Higher starting funds lower your kill income multiplier.");
+        this.add("msb.faction.stat.manpower", "MP");
+        this.add("msb.faction.stat.firepower", "FP");
+        this.add("msb.faction.stat.supply", "SP");
+        this.add("msb.faction.stat.cap", "CAP");
+        this.add("msb.faction.stat.preview", "Preview - effects in a later version");
+        this.add("msb.onboarding.no_base", "No base configured for this faction; skipped teleport.");
+        this.add("msb.onboarding.joined", "Joined %s | funds $%s | starting AI %s");
+        this.add("msb.base.in_zone", "Base block cannot be placed inside the control zone.");
+        this.add("msb.info.title", "Info Panel");
+        this.add("msb.info.tab.faction", "Faction");
+        this.add("msb.info.tab.stats", "Stats");
+        this.add("msb.info.tab.team", "Squad");
+        this.add("msb.info.tab.tutorial", "Guide");
+        this.add("msb.info.faction.none", "No faction yet - use the Mercenary Handbook.");
+        this.add("msb.info.faction.current", "Current faction: %s");
+        this.add("msb.info.stats.title", "Combat Record");
+        this.add("msb.info.stats.line1", "Kills: -");
+        this.add("msb.info.stats.line2", "Deaths: -");
+        this.add("msb.info.stats.line3", "Assists: -");
+        this.add("msb.info.stats.line4", "To be filled in later.");
+        this.add("msb.info.team.title", "Squad");
+        this.add("msb.info.team.line1", "Members: -");
+        this.add("msb.info.team.line2", "Role: -");
+        this.add("msb.info.team.line3", "Objective: -");
+        this.add("msb.info.team.line4", "To be filled in later.");
+        this.add("msb.info.tutorial.title", "Guide");
+        this.add("msb.info.tutorial.line1", "To be filled in later.");
+        this.add("msb.info.tutorial.line2", "...");
+        this.add("msb.info.tutorial.line3", "...");
+        this.add("msb.info.tutorial.line4", "...");
         // 按键与战术地图
         this.add("key.categories.msb", "Mercenary Sandbox Shooter");
         this.add("key.msb.tactical_map", "Tactical Map");
@@ -88,16 +134,28 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.kill_feed.friendly_fire", "Friendly Fire %s %s");
         // 管理员指令
         this.add("msb.command.ai_drop_loot", "AI loot drop set to %s");
+        this.add("msb.command.game_start", "Match force-started (unconfirmed factions defaulted to max AI).");
+        // 开局播报
+        this.add("msb.game.started", "Match started: control zone scoring and AI deployment are now active.");
         // 现金管理指令
         this.add("msb.command.money_get", "Money %s$ (earned %s$ | spent %s$)");
         this.add("msb.command.money_add", "Added %s$, now %s$");
         this.add("msb.command.money_set", "Money set to %s$");
+        // 阵营基金指令（M3 阵营经济预留）
+        this.add("msb.command.fund_get", "Faction funds: S.F %s$ | KCCO %s$ | I.O.P %s$");
         // 配装商店（M2，docs/02 §3.4）
         this.add("key.msb.shop", "Armory");
         this.add("msb.shop.title", "Armory");
         this.add("msb.shop.category.faction", "Faction Store");
-        this.add("msb.shop.category.primary", "Primary");
-        this.add("msb.shop.category.secondary", "Sidearm");
+        this.add("msb.shop.category.guns", "Firearms");
+        this.add("msb.shop.gun.handgun", "Handgun");
+        this.add("msb.shop.gun.smg", "SMG");
+        this.add("msb.shop.gun.rifle", "Rifle");
+        this.add("msb.shop.gun.sniper", "Sniper");
+        this.add("msb.shop.gun.shotgun", "Shotgun");
+        this.add("msb.shop.gun.mg", "MG");
+        this.add("msb.shop.gun.launcher", "Launcher");
+        this.add("msb.shop.gun.special", "Special");
         this.add("msb.shop.category.ammo", "Ammo");
         this.add("msb.shop.category.armor", "Armor");
         this.add("msb.shop.category.throwable", "Throwables");
@@ -128,11 +186,14 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.shop.unsellable", "Not purchasable by the shop");
         this.add("msb.shop.result.failed", "Failed: %s");
         this.add("msb.shop.result.bought", "Bought %s x%s - %s (stored)");
+        this.add("msb.shop.result.bought_honor", "Bought %s x%s - %s Honor (stored)");
         this.add("msb.shop.result.sold", "Sold %s x%s - +%s");
         this.add("msb.shop.result.sold_refund", "Sold %s x%s - +%s (incl. %s refunded)");
         this.add("msb.shop.result.taken", "Took out %s x%s");
         this.add("msb.shop.result.stored", "Stored %s x%s");
+        this.add("msb.shop.result.swapped", "Swapped %s into hotbar slot %s");
         this.add("msb.shop.error.no_balance", "Not enough money");
+        this.add("msb.shop.error.no_honor", "Not enough honor points");
         this.add("msb.shop.error.storage_full", "Storage is full");
         this.add("msb.shop.error.bag_full", "Inventory is full");
         this.add("msb.shop.error.over_weight", "Over the weight limit");
@@ -164,7 +225,53 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.hud.settle", "%s 秒后结算");
         // 聊天播报
         this.add("msb.chat.settle", "控制区结算：");
-        this.add("msb.chat.ai_replaced", "AI %s 已被真人玩家顶替");
+        // 开局流程（雇佣兵手册 / 阵营选择 / 信息栏）
+        this.add("item.msb.mercenary_handbook", "雇佣兵手册");
+        this.add("key.msb.info", "信息栏");
+        this.add("msb.handbook.title", "雇佣兵手册 · 选择阵营");
+        this.add("msb.handbook.granted", "已获得雇佣兵手册，右键打开选择阵营。");
+        this.add("msb.handbook.funding", "初始资金");
+        this.add("msb.handbook.ai_count", "初始 AI 数量");
+        this.add("msb.handbook.base", "基地：%s");
+        this.add("msb.handbook.base.ready", "已配置");
+        this.add("msb.handbook.base.none", "无基地配置");
+        this.add("msb.handbook.confirm", "确认加入");
+        this.add("msb.handbook.joined_as", "已加入 %s");
+        this.add("msb.handbook.tutorial.title", "作战手册");
+        this.add("msb.handbook.tutorial.line1", "游玩教程内容将在此补充。");
+        this.add("msb.handbook.tutorial.line2", "M：战术地图 | B：军火商店 | Tab：信息栏");
+        this.add("msb.handbook.tutorial.line3", "控制区：进入并驻守即可持续得分。");
+        this.add("msb.handbook.tutorial.line4", "初始资金越高，后续击杀收益倍率越低。");
+        this.add("msb.faction.stat.manpower", "人力");
+        this.add("msb.faction.stat.firepower", "火力");
+        this.add("msb.faction.stat.supply", "补给");
+        this.add("msb.faction.stat.cap", "上限");
+        this.add("msb.faction.stat.preview", "预览 · 实际效果待后续版本");
+        this.add("msb.onboarding.no_base", "该阵营无基地配置，已跳过传送。");
+        this.add("msb.onboarding.joined", "已加入 %s | 初始资金 %s$ | 初始 AI %s");
+        this.add("msb.base.in_zone", "基地方块不能放置在控制区内。");
+        this.add("msb.info.title", "信息栏");
+        this.add("msb.info.tab.faction", "阵营");
+        this.add("msb.info.tab.stats", "战绩");
+        this.add("msb.info.tab.team", "队伍");
+        this.add("msb.info.tab.tutorial", "教程");
+        this.add("msb.info.faction.none", "尚未选择阵营，请使用雇佣兵手册。");
+        this.add("msb.info.faction.current", "当前阵营：%s");
+        this.add("msb.info.stats.title", "战绩");
+        this.add("msb.info.stats.line1", "击杀：-");
+        this.add("msb.info.stats.line2", "死亡：-");
+        this.add("msb.info.stats.line3", "助攻：-");
+        this.add("msb.info.stats.line4", "待后续填充。");
+        this.add("msb.info.team.title", "队伍");
+        this.add("msb.info.team.line1", "成员：-");
+        this.add("msb.info.team.line2", "职责：-");
+        this.add("msb.info.team.line3", "目标：-");
+        this.add("msb.info.team.line4", "待后续填充。");
+        this.add("msb.info.tutorial.title", "教程");
+        this.add("msb.info.tutorial.line1", "待后续填充。");
+        this.add("msb.info.tutorial.line2", "...");
+        this.add("msb.info.tutorial.line3", "...");
+        this.add("msb.info.tutorial.line4", "...");
         // 按键与战术地图
         this.add("key.categories.msb", "雇佣兵沙盒射击");
         this.add("key.msb.tactical_map", "战术地图");
@@ -203,16 +310,28 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.kill_feed.friendly_fire", "友伤 %s %s");
         // 管理员指令
         this.add("msb.command.ai_drop_loot", "AI 战利品掉落已设为 %s");
+        this.add("msb.command.game_start", "已强制开局（未确认的阵营默认取最大 AI 数量）。");
+        // 开局播报
+        this.add("msb.game.started", "对局开始：控制区结算与 AI 生成已激活。");
         // 现金管理指令
         this.add("msb.command.money_get", "现金 %s$（本命赚取 %s$ | 已花费 %s$）");
         this.add("msb.command.money_add", "已增加 %s$，当前 %s$");
         this.add("msb.command.money_set", "现金已设为 %s$");
+        // 阵营基金指令（M3 阵营经济预留）
+        this.add("msb.command.fund_get", "阵营基金：S.F %s$ | KCCO %s$ | I.O.P %s$");
         // 配装商店（M2）
         this.add("key.msb.shop", "军火商店");
         this.add("msb.shop.title", "军火商店");
         this.add("msb.shop.category.faction", "阵营商店");
-        this.add("msb.shop.category.primary", "主武器");
-        this.add("msb.shop.category.secondary", "副武器");
+        this.add("msb.shop.category.guns", "枪械");
+        this.add("msb.shop.gun.handgun", "手枪");
+        this.add("msb.shop.gun.smg", "冲锋枪");
+        this.add("msb.shop.gun.rifle", "步枪");
+        this.add("msb.shop.gun.sniper", "狙击枪");
+        this.add("msb.shop.gun.shotgun", "霰弹枪");
+        this.add("msb.shop.gun.mg", "机枪");
+        this.add("msb.shop.gun.launcher", "发射器");
+        this.add("msb.shop.gun.special", "特殊");
         this.add("msb.shop.category.ammo", "弹药");
         this.add("msb.shop.category.armor", "护甲");
         this.add("msb.shop.category.throwable", "投掷物");
@@ -243,11 +362,14 @@ public final class MsbLanguageProvider extends LanguageProvider {
         this.add("msb.shop.unsellable", "商店不可收购");
         this.add("msb.shop.result.failed", "失败：%s");
         this.add("msb.shop.result.bought", "已购买 %s ×%s · %s（已存入储存格）");
+        this.add("msb.shop.result.bought_honor", "已购买 %s ×%s · 荣誉 %s（已存入储存格）");
         this.add("msb.shop.result.sold", "已出售 %s ×%s · +%s");
         this.add("msb.shop.result.sold_refund", "已出售 %s ×%s · +%s（含无损 %s 件）");
         this.add("msb.shop.result.taken", "已取回 %s ×%s（绿框已失效）");
         this.add("msb.shop.result.stored", "已存入 %s ×%s");
+        this.add("msb.shop.result.swapped", "已对调 %s 至快捷栏第 %s 格");
         this.add("msb.shop.error.no_balance", "余额不足");
+        this.add("msb.shop.error.no_honor", "荣誉点不足");
         this.add("msb.shop.error.storage_full", "储存格已满");
         this.add("msb.shop.error.bag_full", "背包已满");
         this.add("msb.shop.error.over_weight", "负重超限");

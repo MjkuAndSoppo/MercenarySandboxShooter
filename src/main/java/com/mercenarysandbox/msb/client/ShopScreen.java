@@ -1,14 +1,14 @@
 package com.mercenarysandbox.msb.client;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-
-import org.lwjgl.glfw.GLFW;
 
 import com.mercenarysandbox.msb.network.ShopDataPayload;
 import com.mercenarysandbox.msb.network.ShopResultPayload;
 import com.mercenarysandbox.msb.network.ShopStoragePayload;
 import com.mercenarysandbox.msb.network.ShopTradePayload;
+import com.mercenarysandbox.msb.shop.GunType;
 import com.mercenarysandbox.msb.shop.ShopCategory;
 import com.mercenarysandbox.msb.shop.ShopCode;
 
@@ -23,6 +23,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
+
+import org.lwjgl.glfw.GLFW;
 
 /**
  * 军火商店（B 键开关，GuiGraphics 自绘；docs §5，原型 ui-prototype/shop 的落地实现）。
@@ -45,6 +47,9 @@ public final class ShopScreen extends Screen {
     private static final int RIGHT_W = 168;
     private static final int MARKET_H = 112;
     private static final int MARKET_HEAD = 11;
+    /** 子分类筛选条（枪械栏）：按钮高与行间距 */
+    private static final int CHIP_H = 13;
+    private static final int CHIP_GAP = 2;
     private static final int LOWER_H = BODY_H - MARKET_H - 4;
     private static final int PANEL_W = 97;
     private static final int STO_W = MID_W - PANEL_W - 4;
@@ -78,6 +83,7 @@ public final class ShopScreen extends Screen {
     private static final int C_TEXT_DIM = 0xFF5A667A;
     private static final int C_GOLD = 0xFFF2B13C;
     private static final int C_GREEN = 0xFF4ADE80;
+    private static final int C_HONOR = 0xFFA78BFA;
     private static final int C_RED = 0xFFFF5A4D;
     private static final int C_MASK = 0x90000000;
     private static final int C_BTN_TEXT = 0xFF14161C;
@@ -94,17 +100,10 @@ public final class ShopScreen extends Screen {
         ShopTradePayload.Zone zone;
     }
 
-    /**
-     * 手上拿着的物品（客户端拖拽态）：左键拿起后跟随光标，左键点目标格放下时才发请求。
-     * 服务端数据不因「拿起」改变 —— 被拒绝时只需清空本状态，无需回滚。
-     */
-    private record Carried(ShopTradePayload.Zone zone, int slot, ResourceLocation item, int count) {
-    }
-
-    private ShopCategory category = ShopCategory.PRIMARY;
+    private ShopCategory category = ShopCategory.GUNS;
     private final Sel sel = new Sel();
-    /** 手上拿着的物品（null = 空手） */
-    private Carried carried;
+    /** 枪械栏子分类筛选（null = 全部） */
+    private GunType gunFilter;
     /** 双击判定：上次点击的格标识与时间 */
     private String lastClickKey = "";
     private long lastClickAt;
@@ -168,8 +167,10 @@ public final class ShopScreen extends Screen {
         return midX() + 3;
     }
 
+    /** 商品格视口顶部：有筛选条时下移（占用其行高） */
     private int marketViewY() {
-        return marketY() + MARKET_HEAD + 1;
+        int rows = chipRows();
+        return rows == 0 ? marketY() + MARKET_HEAD + 1 : chipTop() + rows * (CHIP_H + CHIP_GAP) + 1;
     }
 
     private int marketViewW() {
@@ -177,7 +178,110 @@ public final class ShopScreen extends Screen {
     }
 
     private int marketViewH() {
-        return MARKET_H - MARKET_HEAD - 5;
+        return marketY() + MARKET_H - 5 - marketViewY();
+    }
+
+    // ===== 子分类筛选条（枪械栏） =====
+
+    /** 筛选条按钮（顺序：目录中实际存在的子分类；超出宽度自动折行） */
+    private List<Chip> chips() {
+        List<Chip> list = new ArrayList<>();
+        if (category != ShopCategory.GUNS) {
+            return list;
+        }
+        List<GunType> ordered = gunChips();
+        if (ordered.isEmpty()) {
+            return list;
+        }
+        int maxX = midX() + MID_W - 5;
+        int x = marketViewX();
+        int cy = chipTop();
+        for (GunType type : ordered) {
+            int w = tw(chipLabel(type)) + 8;
+            if (x + w > maxX && x > marketViewX()) {
+                x = marketViewX();
+                cy += CHIP_H + CHIP_GAP;
+            }
+            list.add(new Chip(type, x, cy, w));
+            x += w + 3;
+        }
+        return list;
+    }
+
+    /** 当前生效的枪械子分类（未选择时取目录中第一个真实子分类，不再有「全部」档） */
+    private GunType gunFilter() {
+        if (gunFilter != null) {
+            return gunFilter;
+        }
+        List<GunType> types = gunChips();
+        return types.isEmpty() ? null : types.get(0);
+    }
+
+    /** 筛选条行数（0 = 不显示筛选条） */
+    private int chipRows() {
+        List<Chip> chips = chips();
+        if (chips.isEmpty()) {
+            return 0;
+        }
+        int rows = 1;
+        for (Chip chip : chips) {
+            rows = Math.max(rows, (chip.y() - chipTop()) / (CHIP_H + CHIP_GAP) + 1);
+        }
+        return rows;
+    }
+
+    private int chipTop() {
+        return marketY() + MARKET_HEAD - 1;
+    }
+
+    /** 目录中实际出现过的枪械子分类（按枚举顺序，只列有货的） */
+    private static List<GunType> gunChips() {
+        List<GunType> list = new ArrayList<>();
+        for (ShopDataPayload.Entry entry : ClientShopData.entriesOf(ShopCategory.GUNS)) {
+            GunType type = GunType.byOrdinal(entry.subtype());
+            if (type != null && !list.contains(type)) {
+                list.add(type);
+            }
+        }
+        return list;
+    }
+
+    private static Component chipLabel(GunType type) {
+        return Component.translatable(type.getLangKey());
+    }
+
+    private void drawChips(GuiGraphics g, int mouseX, int mouseY) {
+        GunType activeType = gunFilter();
+        for (Chip chip : chips()) {
+            boolean active = chip.type() == activeType;
+            boolean hover = hit(mouseX, mouseY, chip.x(), chip.y(), chip.w(), CHIP_H);
+            g.fill(chip.x(), chip.y(), chip.x() + chip.w(), chip.y() + CHIP_H,
+                    active ? C_SEL_BG : (hover ? C_SLOT_HOVER : C_SLOT));
+            frame(g, chip.x(), chip.y(), chip.w(), CHIP_H, active ? C_SEL : (hover ? C_BORDER_STRONG : C_BORDER));
+            Component label = chipLabel(chip.type());
+            drawTextV(g, label, chip.x() + (chip.w() - tw(label)) / 2, chip.y(), CHIP_H,
+                    active ? C_GOLD : C_TEXT_SUB);
+        }
+    }
+
+    /** 筛选条按钮矩形（绘制与命中判定共用，避免漂移） */
+    private record Chip(GunType type, int x, int y, int w) {
+    }
+
+    /** 当前分类的可见商品（枪械栏按子分类筛选） */
+    private List<ShopDataPayload.Entry> visibleItems() {
+        List<ShopDataPayload.Entry> all = ClientShopData.entriesOf(category);
+        GunType filter = category == ShopCategory.GUNS ? gunFilter() : null;
+        if (filter == null) {
+            return all;
+        }
+        List<ShopDataPayload.Entry> list = new ArrayList<>();
+        for (ShopDataPayload.Entry entry : all) {
+            if (entry.subtype() == filter.ordinal()) {
+                list.add(entry);
+            }
+        }
+        return list;
     }
 
     private int stoViewX() {
@@ -355,7 +459,6 @@ public final class ShopScreen extends Screen {
         drawPlayerColumn(g, lx, ly);
         drawPanel(g, lx, ly);
         drawFooter(g);
-        drawCarried(g, lx, ly);
         drawToasts(g);
         g.pose().popPose();
         // tooltip 画在屏幕空间（不受缩放影响，坐标用原始鼠标位置）
@@ -377,7 +480,7 @@ public final class ShopScreen extends Screen {
         int cy = bodyY() + 2;
         for (ShopCategory value : ShopCategory.values()) {
             boolean active = value == category;
-            boolean hover = carried == null && hit(mouseX, mouseY, leftX(), cy, LEFT_W - 4, SLOT);
+            boolean hover =  hit(mouseX, mouseY, leftX(), cy, LEFT_W - 4, SLOT);
             if (active) {
                 g.fill(leftX(), cy, leftX() + LEFT_W - 4, cy + SLOT, C_SEL_BG);
                 g.fill(leftX(), cy, leftX() + 2, cy + SLOT, C_SEL);
@@ -392,7 +495,8 @@ public final class ShopScreen extends Screen {
 
     private void drawMarket(GuiGraphics g, int mouseX, int mouseY) {
         box(g, midX(), marketY(), MID_W, MARKET_H);
-        List<ShopDataPayload.Entry> items = ClientShopData.entriesOf(category);
+        drawChips(g, mouseX, mouseY);
+        List<ShopDataPayload.Entry> items = visibleItems();
 
         if (items.isEmpty()) {
             Component empty = Component.translatable("msb.shop.empty");
@@ -414,12 +518,13 @@ public final class ShopScreen extends Screen {
             }
             ShopDataPayload.Entry entry = items.get(i);
             boolean selected = sel.kind == Kind.CATALOG && entry.item().equals(sel.item);
-            boolean hover = carried == null && hit(mouseX, mouseY, cx, cy, CELL, CELL);
+            boolean hover =  hit(mouseX, mouseY, cx, cy, CELL, CELL);
             g.fill(cx, cy, cx + CELL, cy + CELL, hover ? C_SLOT_HOVER : C_SLOT);
             frame(g, cx, cy, CELL, CELL, selected ? C_SEL : (hover ? C_BORDER_STRONG : C_BORDER));
             g.renderItem(ClientShopData.stack(entry.item()), cx + (CELL - 16) / 2, cy + 2);
-            String price = fmtMoney(entry.price());
-            drawText(g, price, cx + CELL / 2 - tw(price) / 2, cy + 19, C_GOLD);
+            String price = category == ShopCategory.HONOR ? String.valueOf(entry.price()) : fmtMoney(entry.price());
+            drawText(g, price, cx + CELL / 2 - tw(price) / 2, cy + 19,
+                    category == ShopCategory.HONOR ? C_HONOR : C_GOLD);
             if (hover) {
                 hoveredEntry = entry;
             }
@@ -449,11 +554,13 @@ public final class ShopScreen extends Screen {
             }
             ShopStoragePayload.Stack stack = i < stacks.size() ? stacks.get(i) : null;
             boolean selected = stack != null && sel.kind == Kind.STORAGE && sel.slot == i;
-            boolean hover = carried == null && stack != null && hit(mouseX, mouseY, cx, cy, SLOT, SLOT);
+            boolean hover =  stack != null && hit(mouseX, mouseY, cx, cy, SLOT, SLOT);
             g.fill(cx, cy, cx + SLOT, cy + SLOT, hover ? C_SLOT_HOVER : C_SLOT);
             if (stack != null) {
-                g.renderItem(ClientShopData.stack(stack.item()), cx, cy);
-                g.renderItemDecorations(font, ClientShopData.stack(stack.item()), cx, cy);
+                // 用带数量的展示栈渲染，否则 renderItemDecorations 拿不到 count（堆叠数不显示）
+                ItemStack display = ClientShopData.stack(stack.item()).copyWithCount(stack.count());
+                g.renderItem(display, cx, cy);
+                g.renderItemDecorations(font, display, cx, cy);
             }
             boolean refund = stack != null && stack.refund() > 0;
             boolean flash = refund && ClientShopData.isFlashing(stack.item()) && (System.currentTimeMillis() / 200) % 2 == 0;
@@ -523,7 +630,7 @@ public final class ShopScreen extends Screen {
     }
 
     private void drawSlot(GuiGraphics g, ItemStack stack, int cx, int cy, int mouseX, int mouseY, boolean selected) {
-        boolean hover = carried == null && !stack.isEmpty() && hit(mouseX, mouseY, cx, cy, SLOT, SLOT);
+        boolean hover =  !stack.isEmpty() && hit(mouseX, mouseY, cx, cy, SLOT, SLOT);
         g.fill(cx, cy, cx + SLOT, cy + SLOT, hover ? C_SLOT_HOVER : C_SLOT);
         if (!stack.isEmpty()) {
             g.renderItem(stack, cx, cy);
@@ -598,15 +705,20 @@ public final class ShopScreen extends Screen {
         }
         int max = maxBuy(entry);
         qty = Mth.clamp(qty, 1, Math.max(1, max));
+        boolean honor = entry.category() == ShopCategory.HONOR.ordinal();
         int y = lowerY() + 3;
         g.renderItem(ClientShopData.stack(entry.item()), x, y);
         drawText(g, trunc(itemName(entry.item()), PANEL_W - 26), x + 20, y + 4, C_TEXT);
-        drawText(g, Component.translatable("msb.shop.price_line", fmtMoney(entry.price())), x, y + 18, C_TEXT_SUB);
+        Component unitPrice = honor ? Component.translatable("msb.shop.honor", entry.price())
+                : Component.literal(fmtMoney(entry.price()));
+        drawText(g, Component.translatable("msb.shop.price_line", unitPrice), x, y + 18, C_TEXT_SUB);
 
         int qtyY = y + 28;
         drawStepButtons(g, x, qtyY, mouseX, mouseY);
         drawTextV(g, String.valueOf(qty), x + 38, qtyY, 14, C_TEXT);
-        drawText(g, Component.translatable("msb.shop.total", fmtMoney(entry.price() * qty)), x, qtyY + 17, C_TEXT_SUB);
+        Component totalPrice = honor ? Component.translatable("msb.shop.honor", entry.price() * qty)
+                : Component.literal(fmtMoney(entry.price() * qty));
+        drawText(g, Component.translatable("msb.shop.total", totalPrice), x, qtyY + 17, C_TEXT_SUB);
 
         int btnY = lowerY() + 58;
         boolean enabled = max >= 1;
@@ -640,10 +752,14 @@ public final class ShopScreen extends Screen {
         drawStepButtons(g, x, qtyY, mouseX, mouseY);
         drawTextV(g, String.valueOf(qty), x + 38, qtyY, 14, C_TEXT);
         int refundPart = Math.min(qty, refund);
-        int earn = entry == null ? 0
+        boolean sellHidden = entry == null || !sellable(entry);
+        int earn = sellHidden ? 0
                 : refundPart * ClientShopData.refundUnit(entry) + (qty - refundPart) * ClientShopData.sellUnit(entry);
-        drawText(g, Component.translatable("msb.shop.income", fmtMoney(earn)), x, qtyY + 17,
-                entry == null ? C_TEXT_DIM : C_GREEN);
+        if (sellHidden) {
+            drawText(g, Component.translatable("msb.shop.unsellable"), x, qtyY + 17, C_TEXT_DIM);
+        } else {
+            drawText(g, Component.translatable("msb.shop.income", fmtMoney(earn)), x, qtyY + 17, C_GREEN);
+        }
 
         int btnY = lowerY() + 58;
         int halfW = (PANEL_W - 8) / 2;
@@ -651,7 +767,7 @@ public final class ShopScreen extends Screen {
             String takeReason = takeReason(item, qty);
             drawButton(g, x, btnY, halfW, BUTTON_H, Component.translatable("msb.shop.take"), takeReason.isEmpty(), mouseX, mouseY);
             drawButton(g, x + halfW + 2, btnY, PANEL_W - 8 - halfW, BUTTON_H, Component.translatable("msb.shop.sell"),
-                    entry != null, mouseX, mouseY);
+                    entry != null && sellable(entry), mouseX, mouseY);
                         if (!takeReason.isEmpty()) {
                 drawText(g, trunc(takeReason, PANEL_W - 8), x, btnY + 29, C_RED);
             }
@@ -659,7 +775,7 @@ public final class ShopScreen extends Screen {
             boolean canStore = ClientShopData.storageRoom(item) >= qty;
             drawButton(g, x, btnY, halfW, BUTTON_H, Component.translatable("msb.shop.store"), canStore, mouseX, mouseY);
             drawButton(g, x + halfW + 2, btnY, PANEL_W - 8 - halfW, BUTTON_H, Component.translatable("msb.shop.sell"),
-                    entry != null, mouseX, mouseY);
+                    entry != null && sellable(entry), mouseX, mouseY);
                         if (!canStore) {
                 drawText(g, trunc(reason("msb.shop.error.storage_full"), PANEL_W - 8), x, btnY + 29, C_RED);
             }
@@ -673,14 +789,14 @@ public final class ShopScreen extends Screen {
     }
 
     private void drawMiniButton(GuiGraphics g, int x, int y, int w, int h, String label, int mouseX, int mouseY) {
-        boolean hover = carried == null && hit(mouseX, mouseY, x, y, w, h);
+        boolean hover =  hit(mouseX, mouseY, x, y, w, h);
         g.fill(x, y, x + w, y + h, hover ? C_SLOT_HOVER : C_SLOT);
         frame(g, x, y, w, h, hover ? C_BORDER_STRONG : C_BORDER);
         drawTextV(g, label, x + w / 2 - tw(label) / 2, y, h, C_TEXT_SUB);
     }
 
     private void drawButton(GuiGraphics g, int x, int y, int w, int h, Component label, boolean enabled, int mouseX, int mouseY) {
-        boolean hover = enabled && carried == null && hit(mouseX, mouseY, x, y, w, h);
+        boolean hover = enabled &&  hit(mouseX, mouseY, x, y, w, h);
         g.fill(x, y, x + w, y + h, enabled ? (hover ? 0xFFFFC55C : C_GOLD) : 0x60404030);
         frame(g, x, y, w, h, enabled ? 0xFF000000 : C_BORDER);
         drawTextV(g, label, x + w / 2 - tw(label) / 2, y, h, enabled ? C_BTN_TEXT : C_TEXT_DIM);
@@ -702,23 +818,7 @@ public final class ShopScreen extends Screen {
         g.fill(barX, fy + 7, barX + (int) Math.min(60, 60 * ratio), fy + 13, color);
     }
 
-    // ===== 光标携带 / toast / tooltip =====
-
-    /** 手上拿着的物品跟随光标绘制（数量角标同图标一起缩放） */
-    private void drawCarried(GuiGraphics g, int mouseX, int mouseY) {
-        if (carried == null) {
-            return;
-        }
-        ItemStack icon = ClientShopData.stack(carried.item());
-        if (icon.isEmpty()) {
-            carried = null;
-            return;
-        }
-        int ix = mouseX - 8;
-        int iy = mouseY - 8;
-        g.renderItem(icon, ix, iy);
-        g.renderItemDecorations(font, icon.copyWithCount(carried.count()), ix, iy);
-    }
+    // ===== toast / tooltip =====
 
     private void drawToasts(GuiGraphics g) {
         List<ClientShopData.Toast> toasts = ClientShopData.activeToasts();
@@ -742,27 +842,39 @@ public final class ShopScreen extends Screen {
             return Component.translatable("msb.shop.result.failed", Component.translatable(payload.code().getLangKey()));
         }
         return switch (payload.action()) {
-            case BUY -> Component.translatable("msb.shop.result.bought", name, payload.count(), fmtMoney(payload.moneyDelta()));
+            case BUY -> {
+                ShopDataPayload.Entry bought = payload.item() == null ? null : ClientShopData.entry(payload.item());
+                if (bought != null && bought.category() == ShopCategory.HONOR.ordinal()) {
+                    yield Component.translatable("msb.shop.result.bought_honor", name, payload.count(),
+                            Math.abs(payload.moneyDelta()));
+                }
+                yield Component.translatable("msb.shop.result.bought", name, payload.count(), fmtMoney(payload.moneyDelta()));
+            }
             case SELL -> payload.refunded() > 0
                     ? Component.translatable("msb.shop.result.sold_refund", name, payload.count(),
                             fmtMoney(payload.moneyDelta()), payload.refunded())
                     : Component.translatable("msb.shop.result.sold", name, payload.count(), fmtMoney(payload.moneyDelta()));
             case TAKE -> Component.translatable("msb.shop.result.taken", name, payload.count());
             case STORE -> Component.translatable("msb.shop.result.stored", name, payload.count());
+            case SWAP_HOTBAR -> Component.translatable("msb.shop.result.swapped", name, payload.count());
         };
     }
 
     private void drawTooltip(GuiGraphics g, int mouseX, int mouseY) {
-        if (carried != null) {
-            return;
-        }
         if (hoveredEntry != null) {
+            boolean honor = hoveredEntry.category() == ShopCategory.HONOR.ordinal();
             MutableComponent text = Component.empty().append(ClientShopData.stack(hoveredEntry.item()).getHoverName());
-            text.append(Component.literal("\n").append(Component.translatable("msb.shop.price_line", fmtMoney(hoveredEntry.price()))));
+            text.append(Component.literal("\n").append(Component.translatable("msb.shop.price_line",
+                    honor ? Component.translatable("msb.shop.honor", hoveredEntry.price())
+                            : Component.literal(fmtMoney(hoveredEntry.price())))));
             text.append(Component.literal("\n").append(Component.translatable("msb.shop.tip.weight",
                     String.format(Locale.ROOT, "%.2f", hoveredEntry.weight()))));
-            text.append(Component.literal("\n").append(Component.translatable("msb.shop.tip.sell",
-                    fmtMoney(ClientShopData.sellUnit(hoveredEntry)))));
+            if (honor) {
+                text.append(Component.literal("\n").append(Component.translatable("msb.shop.unsellable")));
+            } else {
+                text.append(Component.literal("\n").append(Component.translatable("msb.shop.tip.sell",
+                        fmtMoney(ClientShopData.sellUnit(hoveredEntry)))));
+            }
             g.renderTooltip(font, text, mouseX, mouseY);
             return;
         }
@@ -770,7 +882,7 @@ public final class ShopScreen extends Screen {
             MutableComponent text = Component.empty().append(ClientShopData.stack(hoveredStack.item()).getHoverName());
             ShopDataPayload.Entry entry = ClientShopData.entry(hoveredStack.item());
             text.append(Component.literal("\n").append(Component.translatable("msb.shop.held_count", hoveredStack.count())));
-            if (entry == null) {
+            if (entry == null || !sellable(entry)) {
                 text.append(Component.literal("\n").append(Component.translatable("msb.shop.unsellable")));
             } else {
                 text.append(Component.literal("\n").append(Component.translatable("msb.shop.tip.sell",
@@ -789,7 +901,7 @@ public final class ShopScreen extends Screen {
 
     // ===== 交互 =====
 
-    /** 左键：拿起 / 放下（双击购买）；右键：卖回商店；Ctrl+左键：快速取出 / 放入 */
+    /** 左键：单击选中、双击执行（商品格 = 购买 / 储存格 = 取出 / 玩家栏 = 存入）；右键：卖回；Ctrl+左键：整组取出/存入 */
     @Override
     public boolean mouseClicked(double screenX, double screenY, int button) {
         if (button != 0 && button != 1) {
@@ -805,17 +917,25 @@ public final class ShopScreen extends Screen {
             for (ShopCategory value : ShopCategory.values()) {
                 if (hit(mx, my, leftX(), cy, LEFT_W - 4, SLOT)) {
                     category = value;
+                    gunFilter = null;
                     marketScroll = 0;
-                    carried = null;
                     clearSelection();
                     return true;
                 }
                 cy += SLOT + SLOT_GAP;
             }
+            // 子分类筛选条（仅枪械栏）
+            for (Chip chip : chips()) {
+                if (hit(mx, my, chip.x(), chip.y(), chip.w(), CHIP_H)) {
+                    gunFilter = chip.type();
+                    marketScroll = 0;
+                    return true;
+                }
+            }
         }
 
         // 商品格：单击选中、双击购买（Ctrl 双击只买 1 件）
-        List<ShopDataPayload.Entry> items = ClientShopData.entriesOf(category);
+        List<ShopDataPayload.Entry> items = visibleItems();
         int gridX = marketViewX() + (marketViewW() - GRID_W) / 2;
         for (int i = 0; i < items.size(); i++) {
             int cx = gridX + (i % CELL_COLS) * (CELL + CELL_GAP);
@@ -845,32 +965,24 @@ public final class ShopScreen extends Screen {
                 continue;
             }
             ShopStoragePayload.Stack stack = i < stacks.size() ? stacks.get(i) : null;
-            if (button == 1) {                                  // 右键退回：整堆卖回
-                if (stack != null) {
+            if (stack == null) {
+                continue;
+            }
+            if (button == 1) {                                  // 右键：整堆卖回（荣誉商店物品不可卖回）
+                ShopDataPayload.Entry shopEntry = ClientShopData.entry(stack.item());
+                if (shopEntry != null && sellable(shopEntry)) {
                     send(ShopTradePayload.Action.SELL, ShopTradePayload.Zone.STORAGE, i, stack.item(), stack.count());
+                } else {
+                    ClientShopData.localFailure(ShopCode.UNSELLABLE, stack.item());
                 }
-                return true;
-            }
-            if (ctrl) {                                         // Ctrl+左键：快速取出
-                if (stack != null) {
-                    send(ShopTradePayload.Action.TAKE, ShopTradePayload.Zone.STORAGE, i,
-                            ShopTradePayload.TARGET_AUTO, stack.item(), stack.count());
-                }
-                return true;
-            }
-            if (stack != null) {
+            } else if (ctrl) {                                  // Ctrl+左键：整组取出（该物品全部堆叠）
                 selectStorage(i, stack);
-                boolean sameSource = carried != null
-                        && carried.zone() == ShopTradePayload.Zone.STORAGE && carried.slot() == i;
-                carried = sameSource ? null
-                        : new Carried(ShopTradePayload.Zone.STORAGE, i, stack.item(), stack.count());
-            } else if (carried != null && carried.zone() != ShopTradePayload.Zone.STORAGE) {
-                send(ShopTradePayload.Action.STORE, carried.zone(), carried.slot(),   // 放下到储存格
-                        carried.item(), carried.count());
-                carried = null;
-            } else {
-                carried = null;
-                clearSelection();
+                takeAll(stack.item());
+            } else {                                            // 左键：单击选中、双击取出（自动入包）
+                selectStorage(i, stack);
+                if (isDoubleClick("storage:" + i)) {
+                    send(ShopTradePayload.Action.TAKE, ShopTradePayload.Zone.STORAGE, i, stack.item(), stack.count());
+                }
             }
             return true;
         }
@@ -881,7 +993,7 @@ public final class ShopScreen extends Screen {
             int cyp = equipGridY() + (i / 3) * (SLOT + SLOT_GAP);
             if (hit(mx, my, cx, cyp, SLOT, SLOT)) {
                 playerZoneClick(button, ctrl,
-                        i < 4 ? ShopTradePayload.Zone.ARMOR : ShopTradePayload.Zone.OFFHAND, i < 4 ? i : 0, -1);
+                        i < 4 ? ShopTradePayload.Zone.ARMOR : ShopTradePayload.Zone.OFFHAND, i < 4 ? i : 0);
                 return true;
             }
         }
@@ -890,7 +1002,7 @@ public final class ShopScreen extends Screen {
             int cx = colX() + (i % 9) * (SLOT + SLOT_GAP);
             int cyp = mainGridY() + (i / 9) * (SLOT + SLOT_GAP);
             if (hit(mx, my, cx, cyp, SLOT, SLOT)) {
-                playerZoneClick(button, ctrl, ShopTradePayload.Zone.MAIN, i, i + 9);
+                playerZoneClick(button, ctrl, ShopTradePayload.Zone.MAIN, i);
                 return true;
             }
         }
@@ -898,7 +1010,7 @@ public final class ShopScreen extends Screen {
         for (int i = 0; i < 9; i++) {
             int cx = colX() + i * (SLOT + SLOT_GAP);
             if (hit(mx, my, cx, hotbarGridY(), SLOT, SLOT)) {
-                playerZoneClick(button, ctrl, ShopTradePayload.Zone.HOTBAR, i, i);
+                playerZoneClick(button, ctrl, ShopTradePayload.Zone.HOTBAR, i);
                 return true;
             }
         }
@@ -907,39 +1019,54 @@ public final class ShopScreen extends Screen {
         return true;
     }
 
-    /**
-     * 玩家栏格子点击：右键卖回 / Ctrl+左键快速存入 / 左键拿起或放下。
-     * {@code playerGlobalSlot} = 该格在玩家背包的全局索引（0-8 快捷栏 / 9-35 物品栏；装备/副手为 -1）。
-     */
-    private void playerZoneClick(int button, boolean ctrl,
-            ShopTradePayload.Zone zone, int slot, int playerGlobalSlot) {
+    /** 玩家栏格子点击：左键单击选中、双击存入储存格（Ctrl = 该物品全部堆叠）、右键卖回商店 */
+    private void playerZoneClick(int button, boolean ctrl, ShopTradePayload.Zone zone, int slot) {
         ItemStack stack = playerStack(zone, slot);
-        if (button == 1) {
-            if (!stack.isEmpty()) {
-                send(ShopTradePayload.Action.SELL, zone, slot, itemIdOf(stack), stack.getCount());
-            }
-            return;
-        }
         if (stack.isEmpty()) {
-            // 空格：手上有储存格物品 → 取出并精确落到该格
-            if (carried != null && carried.zone() == ShopTradePayload.Zone.STORAGE) {
-                send(ShopTradePayload.Action.TAKE, ShopTradePayload.Zone.STORAGE, carried.slot(),
-                        playerGlobalSlot >= 0 ? playerGlobalSlot : ShopTradePayload.TARGET_AUTO,
-                        carried.item(), carried.count());
-                carried = null;
-            } else {
-                carried = null;
-                clearSelection();
-            }
+            clearSelection();
             return;
         }
-        if (ctrl) {                                             // Ctrl+左键：快速存入
-            send(ShopTradePayload.Action.STORE, zone, slot, itemIdOf(stack), stack.getCount());
+        if (button == 1) {
+            ResourceLocation id = itemIdOf(stack);
+            ShopDataPayload.Entry shopEntry = id == null ? null : ClientShopData.entry(id);
+            if (shopEntry != null && sellable(shopEntry)) {
+                send(ShopTradePayload.Action.SELL, zone, slot, id, stack.getCount());
+            } else {
+                ClientShopData.localFailure(ShopCode.UNSELLABLE, id);
+            }
             return;
         }
         selectPlayer(zone, slot);
-        boolean sameSource = carried != null && carried.zone() == zone && carried.slot() == slot;
-        carried = sameSource ? null : new Carried(zone, slot, itemIdOf(stack), stack.getCount());
+        if (ctrl) {
+            storeAll(itemIdOf(stack));
+        } else if (isDoubleClick("player:" + zone + ":" + slot)) {
+            send(ShopTradePayload.Action.STORE, zone, slot, itemIdOf(stack), stack.getCount());
+        }
+    }
+
+    /** Ctrl+左键：取出储存格中该物品的全部堆叠（逐堆请求，服务端各自校验） */
+    private void takeAll(ResourceLocation item) {
+        for (int i = 0; i < ClientShopData.storage().size(); i++) {
+            ShopStoragePayload.Stack stack = storageStack(i);
+            if (stack != null && stack.item().equals(item)) {
+                send(ShopTradePayload.Action.TAKE, ShopTradePayload.Zone.STORAGE, i, item, stack.count());
+            }
+        }
+    }
+
+    /** Ctrl+左键：把背包/快捷栏中该物品的全部堆叠存入储存格 */
+    private void storeAll(ResourceLocation item) {
+        storeZone(item, ShopTradePayload.Zone.MAIN, 27);
+        storeZone(item, ShopTradePayload.Zone.HOTBAR, 9);
+    }
+
+    private void storeZone(ResourceLocation item, ShopTradePayload.Zone zone, int size) {
+        ItemStack[] slots = playerSlots(zone, size);
+        for (int i = 0; i < slots.length; i++) {
+            if (!slots[i].isEmpty() && item.equals(itemIdOf(slots[i]))) {
+                send(ShopTradePayload.Action.STORE, zone, i, item, slots[i].getCount());
+            }
+        }
     }
 
     /** 双击判定（同一格 280ms 内两次左键；命中后消耗，避免三击连锁） */
@@ -985,15 +1112,14 @@ public final class ShopScreen extends Screen {
         if (hit(mx, my, x, btnY, halfW, BUTTON_H)) {              // 取回 / 存入
             if (fromStorage) {
                 if (takeReason(sel.item, qty).isEmpty()) {
-                    send(ShopTradePayload.Action.TAKE, ShopTradePayload.Zone.STORAGE, sel.slot,
-                            ShopTradePayload.TARGET_AUTO, sel.item, qty);
+                    send(ShopTradePayload.Action.TAKE, ShopTradePayload.Zone.STORAGE, sel.slot, sel.item, qty);
                 }
             } else if (ClientShopData.storageRoom(sel.item) >= qty) {
                 send(ShopTradePayload.Action.STORE, sel.zone, sel.slot, sel.item, qty);
             }
             return;
         }
-        if (entry != null && hit(mx, my, x + halfW + 2, btnY, PANEL_W - 8 - halfW, BUTTON_H)) {
+        if (entry != null && sellable(entry) && hit(mx, my, x + halfW + 2, btnY, PANEL_W - 8 - halfW, BUTTON_H)) {
             send(ShopTradePayload.Action.SELL, sel.zone, sel.slot, sel.item, qty);
         }
     }
@@ -1009,13 +1135,14 @@ public final class ShopScreen extends Screen {
         }
         int max = maxBuy(entry);
         if (max < 1) {
-            ClientShopData.localFailure(ClientShopData.storageRoom(entry.item()) < 1
-                    ? ShopCode.STORAGE_FULL : ShopCode.NO_BALANCE, sel.item);
+            ShopCode code = ClientShopData.storageRoom(entry.item()) < 1
+                    ? ShopCode.STORAGE_FULL
+                    : (entry.category() == ShopCategory.HONOR.ordinal() ? ShopCode.NO_HONOR : ShopCode.NO_BALANCE);
+            ClientShopData.localFailure(code, sel.item);
             return;
         }
         int amount = Mth.clamp(count, 1, Math.min(999, max));
-        send(ShopTradePayload.Action.BUY, ShopTradePayload.Zone.STORAGE, 0,
-                ShopTradePayload.TARGET_AUTO, sel.item, amount);
+        send(ShopTradePayload.Action.BUY, ShopTradePayload.Zone.STORAGE, 0, sel.item, amount);
     }
 
     @Override
@@ -1033,10 +1160,17 @@ public final class ShopScreen extends Screen {
         return super.mouseScrolled(screenX, screenY, deltaX, deltaY);
     }
 
+    
+
+    /**
+     * 大键盘 1~9：把左键选中的槽位与对应快捷栏格对调（玩家栏四区 / 储存格均可，商品格不适用）。
+     */
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE && carried != null) {
-            carried = null;                                       // 先取消拿起，再按一次才关窗口
+        int hotbar = keyCode - GLFW.GLFW_KEY_1;
+        if (hotbar >= 0 && hotbar <= 8
+                && (sel.kind == Kind.PLAYER || sel.kind == Kind.STORAGE) && sel.item != null) {
+            send(ShopTradePayload.Action.SWAP_HOTBAR, sel.zone, sel.slot, sel.item, hotbar);
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -1095,19 +1229,14 @@ public final class ShopScreen extends Screen {
         qty = Mth.clamp(qty, 1, Math.min(999, max));
     }
 
-    private void send(ShopTradePayload.Action action, ShopTradePayload.Zone zone, int slot, ResourceLocation item, int count) {
-        send(action, zone, slot, ShopTradePayload.TARGET_AUTO, item, count);
-    }
-
-    /** 带精确落点（拖拽放下到玩家栏指定格）的发送 */
-    private void send(ShopTradePayload.Action action, ShopTradePayload.Zone zone, int slot, int targetSlot,
+    private void send(ShopTradePayload.Action action, ShopTradePayload.Zone zone, int slot,
             ResourceLocation item, int count) {
         if (item == null) {
             return;
         }
         // 防御：zone 缺失一律按储存格处理（避免编码期 NPE 断开连接）
         ShopTradePayload.Zone safeZone = zone == null ? ShopTradePayload.Zone.STORAGE : zone;
-        PacketDistributor.sendToServer(new ShopTradePayload(action, safeZone, slot, targetSlot, item, count));
+        PacketDistributor.sendToServer(new ShopTradePayload(action, safeZone, slot, item, count));
     }
 
     private ShopStoragePayload.Stack storageStack(int index) {
@@ -1125,19 +1254,33 @@ public final class ShopScreen extends Screen {
                 || entry.category() == ShopCategory.AMMO.ordinal();
     }
 
+    /** 与服务端一致：荣誉商店条目以荣誉点计价，禁止卖回换现金 */
+    private static boolean sellable(ShopDataPayload.Entry entry) {
+        return entry.category() != ShopCategory.HONOR.ordinal();
+    }
+
     private int maxBuy(ShopDataPayload.Entry entry) {
         if (entry == null) {
             return 0;
         }
         int byRoom = ClientShopData.storageRoom(entry.item());
-        int byMoney = creditAllowed(entry) ? 999
-                : ClientMatchState.getWalletTotal() / Math.max(1, entry.price());
-        return Math.max(0, Math.min(999, Math.min(byMoney, byRoom)));
+        int byAfford;
+        if (entry.category() == ShopCategory.HONOR.ordinal()) {
+            byAfford = ClientShopData.honorPoints() / Math.max(1, entry.price());
+        } else if (creditAllowed(entry)) {
+            byAfford = 999;
+        } else {
+            byAfford = ClientMatchState.getWalletTotal() / Math.max(1, entry.price());
+        }
+        return Math.max(0, Math.min(999, Math.min(byAfford, byRoom)));
     }
 
     private String buyReason(ShopDataPayload.Entry entry) {
         if (ClientShopData.storageRoom(entry.item()) < 1) {
             return reason("msb.shop.error.storage_full");
+        }
+        if (entry.category() == ShopCategory.HONOR.ordinal()) {
+            return reason("msb.shop.error.no_honor");
         }
         return reason("msb.shop.error.no_balance");
     }

@@ -9,7 +9,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import com.mercenarysandbox.msb.MercenarySandboxShooter;
 
 /**
- * 客户端游戏事件接线（GAME 总线）：M 键战术地图 / B 键军火商店（打开时再按一次关闭）。
+ * 客户端游戏事件接线（GAME 总线）：M 键战术地图 / B 键军火商店 / Tab 键信息栏（打开时再按一次关闭）。
  */
 @EventBusSubscriber(modid = MercenarySandboxShooter.MODID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
 public final class MsbClientEvents {
@@ -28,6 +28,13 @@ public final class MsbClientEvents {
                 mc.setScreen(null);
             } else if (mc.screen == null) {
                 mc.setScreen(new ShopScreen());
+            }
+        }
+        if (MsbKeyMappings.INFO_KEY.consumeClick()) {
+            if (mc.screen instanceof InfoScreen) {
+                mc.setScreen(null);
+            } else if (mc.screen == null) {
+                mc.setScreen(new InfoScreen());
             }
         }
     }

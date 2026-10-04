@@ -1,10 +1,8 @@
 package com.mercenarysandbox.msb.faction;
 
 import java.util.ArrayList;
-import java.util.List;
 
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
@@ -13,7 +11,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 import com.mercenarysandbox.msb.network.SyncFactionPayload;
 
 /**
- * 阵营服务端单例：计分板队伍维护、加入即分配、附体读写、真人人数统计。
+ * 阵营服务端单例：计分板队伍维护、阵营选择落地、附体读写。
  * 敌我识别判定（同阵营=友）服务端权威，客户端只收 SyncFaction 结果。
  */
 public final class FactionManager {
@@ -42,18 +40,19 @@ public final class FactionManager {
         return player.getData(FactionAttachments.FACTION);
     }
 
-    /** 加入即分配：已有阵营则恢复队伍；无阵营则分入真人最少的一方 */
+    /** 加入即恢复：已有阵营则恢复队伍并同步；无阵营保持 NONE（开局由雇佣兵手册选择阵营） */
     public static void assignOnJoin(ServerPlayer player) {
         Faction current = getPlayerFaction(player);
         if (current == Faction.NONE) {
-            current = leastPopulated(player.server);
-            player.setData(FactionAttachments.FACTION, current);
+            // 无阵营：只同步 NONE，等待玩家通过雇佣兵手册选择（开局流程）
+            PacketDistributor.sendToPlayer(player, new SyncFactionPayload(Faction.NONE.getId()));
+            return;
         }
         setTeam(player, current);
         PacketDistributor.sendToPlayer(player, new SyncFactionPayload(current.getId()));
     }
 
-    /** 显式改派阵营（M1 未提供选择 UI，留给后续 FactionSelect 使用） */
+    /** 显式改派阵营（开局流程：雇佣兵手册 FactionSelect 选择后调用） */
     public static void setPlayerFaction(ServerPlayer player, Faction faction) {
         player.setData(FactionAttachments.FACTION, faction);
         setTeam(player, faction);
@@ -79,39 +78,5 @@ public final class FactionManager {
         if (target != null) {
             scoreboard.addPlayerToTeam(player.getScoreboardName(), target);
         }
-    }
-
-    /** 实时统计某阵营在线真人玩家数（供 AI 槽位平衡与加入分配使用） */
-    public static int countRealPlayers(MinecraftServer server, Faction faction) {
-        int count = 0;
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            if (getPlayerFaction(p) == faction) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    /** 选出真人玩家最少的阵营（平局时按服务器 tick 随机取一，避免涌入同一边） */
-    public static Faction leastPopulated(MinecraftServer server) {
-        List<Faction> candidates = new ArrayList<>();
-        int min = Integer.MAX_VALUE;
-        for (Faction f : Faction.values()) {
-            if (f == Faction.NONE) {
-                continue;
-            }
-            int n = countRealPlayers(server, f);
-            if (n < min) {
-                min = n;
-                candidates.clear();
-                candidates.add(f);
-            } else if (n == min) {
-                candidates.add(f);
-            }
-        }
-        if (candidates.isEmpty()) {
-            return Faction.LONESTAR;
-        }
-        return candidates.get(server.getTickCount() % candidates.size());
     }
 }

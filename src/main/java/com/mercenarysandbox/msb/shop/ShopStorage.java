@@ -6,7 +6,9 @@ import java.util.List;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 
 /**
  * 个人储存格（服务端权威，挂在 ServerPlayer 附体上；见 docs §3/§4）。
@@ -19,6 +21,15 @@ public final class ShopStorage {
 
     /** 单格最大堆叠（与背包一致） */
     public static final int MAX_STACK = 64;
+
+    /**
+     * 该物品的单格上限（取物品默认最大堆叠，再受 {@link #MAX_STACK} 约束）。
+     * 不可堆叠物品（枪械等 maxStackSize=1）返回 1 —— 储存格据此拒绝把两把枪塞进同一格。
+     */
+    public static int maxStackOf(ResourceLocation item) {
+        Item value = BuiltInRegistries.ITEM.get(item);
+        return value == null ? 1 : Math.min(MAX_STACK, Math.max(1, value.getDefaultMaxStackSize()));
+    }
 
     public static final Codec<ShopStorage> CODEC =
             Stack.CODEC.listOf().xmap(ShopStorage::new, ShopStorage::stacks);
@@ -71,7 +82,7 @@ public final class ShopStorage {
         }
 
         public int room() {
-            return Math.max(0, MAX_STACK - count);
+            return Math.max(0, maxStackOf(item) - count);
         }
     }
 
@@ -80,8 +91,23 @@ public final class ShopStorage {
     public ShopStorage() {
     }
 
+    /** 载入时规整：按各物品的单格上限拆分超堆叠（旧存档里被并在一起的不可堆叠物品如枪械） */
     public ShopStorage(List<Stack> initial) {
-        this.stacks.addAll(initial);
+        for (Stack source : initial) {
+            int remaining = source.count();
+            int refund = source.refund();
+            if (remaining <= 0) {
+                continue;
+            }
+            int cap = maxStackOf(source.item());
+            while (remaining > 0) {
+                int put = Math.min(cap, remaining);
+                int credit = Math.min(put, refund);
+                stacks.add(new Stack(source.item(), put, credit));
+                remaining -= put;
+                refund -= credit;
+            }
+        }
     }
 
     public List<Stack> stacks() {

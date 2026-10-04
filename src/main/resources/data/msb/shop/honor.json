@@ -1,3 +1,13 @@
 {
-  "entries": []
+  "entries": [
+    { "item": "superbwarfare:homemade_shotgun", "price": 40, "weight": 1.0 },
+    { "item": "superbwarfare:trachelium", "price": 60, "weight": 1.5 },
+    { "item": "superbwarfare:bocek", "price": 80, "weight": 2.5 },
+    { "item": "superbwarfare:insidious", "price": 150, "weight": 5.0 },
+    { "item": "superbwarfare:devotion", "price": 200, "weight": 5.0 },
+    { "item": "superbwarfare:sentinel", "price": 250, "weight": 6.0 },
+    { "item": "superbwarfare:ql_1031", "price": 300, "weight": 4.0 },
+    { "item": "superbwarfare:secondary_cataclysm", "price": 400, "weight": 8.0 },
+    { "item": "superbwarfare:super_star_shooter", "price": 500, "weight": 12.0 }
+  ]
 }

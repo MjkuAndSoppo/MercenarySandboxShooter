@@ -28,15 +28,16 @@ public class Config {
 
     // ===== M1 对局配置（docs/02 §3.2 / §3.12）=====
     public static final ModConfigSpec.IntValue CONTROL_ZONE_RADIUS = BUILDER
-            .comment("Control zone radius in blocks (zone center = world spawn)")
-            .defineInRange("controlZoneRadius", 30, 5, 500);
+            .comment("Control zone radius in blocks (512-block-scale zone; zone center = world spawn)")
+            .defineInRange("controlZoneRadius", 256, 16, 512);
 
     public static final ModConfigSpec.IntValue SETTLE_INTERVAL_SECONDS = BUILDER
             .comment("Control zone settlement interval in seconds")
             .defineInRange("settleIntervalSeconds", 30, 5, 3600);
 
+    /** 兜底默认：某阵营尚未有玩家通过手册选择开局 AI 数量时使用的默认值（开局选择后以 FactionSetupData 为准） */
     public static final ModConfigSpec.IntValue AI_TARGET_PER_FACTION = BUILDER
-            .comment("Target combat units per faction (real players + AI). AI count = target - real players")
+            .comment("Fallback AI count per faction when no player has chosen a starting AI count via the handbook")
             .defineInRange("aiTargetPerFaction", 10, 1, 100);
 
     // ===== 阵营基地方块（docs/02 §5.1）=====
@@ -54,13 +55,44 @@ public class Config {
             .define("tacticalMapRotateWithPlayer", true);
 
     // ===== 击杀结算（docs/02 击杀提示）=====
+    /** 击杀敌方玩家基础赏金 */
     public static final ModConfigSpec.IntValue KILL_MONEY_REWARD = BUILDER
-            .comment("Money reward for killing a monster or enemy player")
-            .defineInRange("killMoneyReward", 20, 0, 10000);
+            .comment("Base money bounty for killing an enemy player")
+            .defineInRange("killMoneyReward", 100, 0, 100000);
+
+    /** 击杀怪物（普通生物）基础赏金 */
+    public static final ModConfigSpec.IntValue KILL_MONEY_REWARD_MOB = BUILDER
+            .comment("Base money bounty for killing a monster / plain mob")
+            .defineInRange("killMoneyRewardMob", 100, 0, 100000);
+
+    /** 击杀敌方阵营 AI 基础赏金 */
+    public static final ModConfigSpec.IntValue KILL_MONEY_REWARD_AI = BUILDER
+            .comment("Base money bounty for killing an enemy faction AI")
+            .defineInRange("killMoneyRewardAi", 200, 0, 100000);
 
     public static final ModConfigSpec.IntValue KILL_XP_REWARD = BUILDER
-            .comment("Experience points granted directly to the killer")
-            .defineInRange("killXpReward", 10, 0, 1000);
+            .comment("Base experience granted directly to the killer")
+            .defineInRange("killXpReward", 15, 0, 10000);
+
+    /** 目标本条命击杀数加成：目标每击杀过一个单位，额外 +100$（赏金随目标连杀增长） */
+    public static final ModConfigSpec.IntValue KILL_BOUNTY_PER_KILL = BUILDER
+            .comment("Extra money per kill the victim had this life, on top of the base bounty for an enemy player victim")
+            .defineInRange("killBountyPerKill", 100, 0, 100000);
+
+    /** 击杀怪物：目标每击杀过一个单位，额外 +50$ */
+    public static final ModConfigSpec.IntValue KILL_BOUNTY_PER_KILL_MOB = BUILDER
+            .comment("Extra money per kill the victim had this life, on top of the base bounty for a mob victim")
+            .defineInRange("killBountyPerKillMob", 50, 0, 100000);
+
+    /** 击杀敌方阵营 AI：目标每击杀过一个单位，额外 +100$ */
+    public static final ModConfigSpec.IntValue KILL_BOUNTY_PER_KILL_AI = BUILDER
+            .comment("Extra money per kill the victim had this life, on top of the base bounty for an enemy AI victim")
+            .defineInRange("killBountyPerKillAi", 100, 0, 100000);
+
+    /** 目标本条命击杀数加成：目标每击杀过一个单位，额外 +5 EXP */
+    public static final ModConfigSpec.IntValue KILL_XP_PER_KILL = BUILDER
+            .comment("Extra experience per kill the victim had this life")
+            .defineInRange("killXpPerKill", 5, 0, 10000);
 
     public static final ModConfigSpec.IntValue KILL_FRIENDLY_PENALTY = BUILDER
             .comment("Money penalty for killing a teammate (docs/02 friendly fire rules)")
@@ -92,6 +124,16 @@ public class Config {
     public static final ModConfigSpec.IntValue SHOP_STORAGE_SLOTS = BUILDER
             .comment("Personal shop storage capacity in stacks")
             .defineInRange("shopStorageSlots", 60, 6, 600);
+
+    /** 目录未收录物品的默认买入价（$）：使其默认可出售（卖价 = 默认价 × 六折系数） */
+    public static final ModConfigSpec.IntValue SHOP_DEFAULT_PRICE = BUILDER
+            .comment("Fallback buy price for items not listed in the shop catalog (so they can still be sold back)")
+            .defineInRange("shopDefaultPrice", 20, 0, 100000);
+
+    /** 目录未收录物品的默认单件负重（kg） */
+    public static final ModConfigSpec.DoubleValue SHOP_DEFAULT_WEIGHT = BUILDER
+            .comment("Fallback weight (kg) for items not listed in the shop catalog")
+            .defineInRange("shopDefaultWeight", 0.01D, 0.0D, 1000.0D);
 
     public static final ModConfigSpec.DoubleValue LOADOUT_WEIGHT_LIMIT_KG = BUILDER
             .comment("Carried weight limit in kg (catalog items in player zones; shop storage excluded)")

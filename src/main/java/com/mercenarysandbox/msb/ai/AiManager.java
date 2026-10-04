@@ -16,20 +16,19 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 
-import com.mercenarysandbox.msb.Config;
 import com.mercenarysandbox.msb.MercenarySandboxShooter;
 import com.mercenarysandbox.msb.entity.AiCombatantEntity;
 import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.faction.FactionManager;
 import com.mercenarysandbox.msb.match.ControlZone;
 import com.mercenarysandbox.msb.match.MatchManager;
+import com.mercenarysandbox.msb.onboarding.FactionSetupData;
 
 /**
- * AI 填充与真人顶替（服务端实体化管理，docs/02 §3.12）。
- * 每阵营 AI 实体数 = 目标战斗单位数 - 真人玩家数；
- * 真人加入 → 顶替一个 AI 槽（优先取消待复活 AI，其次顶替在场实体）；真人退出 → AI 补位。
+ * AI 填充（服务端实体化管理，docs/02 §3.12）。
+ * 每阵营 AI 实体数 = 开局选择的 AI 数量目标（FactionSetupData，多真人玩家不占用 AI 槽，不去顶替）；
  * AI 被击杀后进入独立复活队列（每个 AI 单独 CD），CD 到期从所属阵营基地复活，
- * 无基地时回退到控制区周围随机生成；实体可能被玩家击杀，tick 每轮先清理 isRemoved。
+ * 无基地时不生成；实体可能被玩家击杀，tick 每轮先清理 isRemoved。
  */
 public final class AiManager {
     /** 复活 CD（tick）：每个 AI 死亡后单独计时，到期后从阵营基地复活（10s） */
@@ -89,41 +88,20 @@ public final class AiManager {
         }
     }
 
-    /** 真人加入：顶替一个 AI 槽（优先取消最近死亡的待复活 AI，其次顶替在场实体） */
-    public void onRealPlayerJoined(Faction faction) {
-        Deque<Long> queue = respawnQueue.get(faction);
-        if (queue != null && !queue.isEmpty()) {
-            queue.removeLast();
-            return;
-        }
-        List<AiCombatantEntity> list = units.get(faction);
-        if (list == null || list.isEmpty()) {
-            return;
-        }
-        AiCombatantEntity removed = list.remove(list.size() - 1);
-        Component name = removed.getName();
-        leaveTeam(removed);
-        removed.discard();
-        server.getPlayerList().broadcastSystemMessage(
-                Component.translatable("msb.chat.ai_replaced", name), false);
-    }
-
-    /** 真人退出：AI 补位到目标人数 */
-    public void onRealPlayerLeft(Faction faction) {
-        reconcile(faction);
-    }
-
     /** 基地方块放置后：立即为该阵营补足 AI 实体（无基地时 AI 不生成） */
     public void onBasePlaced(Faction faction) {
         reconcile(faction);
     }
 
-    /** 按目标人数补齐/裁减某阵营 AI（无基地直接跳过；目标 = 配置目标数 - 真人玩家数，下限 0） */
-    private void reconcile(Faction faction) {
+    /** 按目标人数补齐/裁减某阵营 AI（开局门槛未满足或无基地时跳过；目标 = 开局选择的 AI 数量，下限 0） */
+    public void reconcile(Faction faction) {
+        if (!MatchManager.get(server).isStarted()) {
+            return; // 开局门槛未满足：不生成/复活 AI（docs/02 §3.14）
+        }
         if (MatchManager.get(server).getBasePos(faction) == null) {
             return;
         }
-        int desired = Math.max(0, Config.AI_TARGET_PER_FACTION.get() - FactionManager.countRealPlayers(server, faction));
+        int desired = Math.max(0, FactionSetupData.get(server).getTarget(faction));
         List<AiCombatantEntity> list = units.get(faction);
         Deque<Long> queue = respawnQueue.get(faction);
         while (list.size() + queue.size() < desired) {
@@ -153,6 +131,8 @@ public final class AiManager {
         BlockPos pos = respawnPos(faction, level);
         entity.setPos(pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D);
         entity.setFaction(faction);
+        // 编队种子：阵营内序号 → 各 AI 的推进/巡逻/跳伞目标互不相同（方阵移动）
+        entity.setFormationSeed(n);
         entity.equipLoadout();
         entity.setCustomName(Component.literal(faction.getAbbr() + "pmc." + n));
         joinTeam(entity, faction);

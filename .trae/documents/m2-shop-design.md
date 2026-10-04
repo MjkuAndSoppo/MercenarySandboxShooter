@@ -52,15 +52,20 @@ ClientShopData（客户端缓存）──► ShopScreen（自绘：分类/列表
 
 **位置**：`src/main/resources/data/msb/shop/<category>.json`，一个分类一个文件（文件即分类，支持 `data/<ns>/shop/` 追加）。**不手写 lang JSON 的约束只针对语言资源；商店目录是游戏数据，直接手写**（与 SBW `data/msb/sbw/mob_guns/ai_combatant.json` 同性质）。
 
-**分类枚举**（固定 6 类，语言键 `msb.shop.category.*`）：`primary` 主武器 / `secondary` 副武器 / `ammo` 弹药 / `armor` 护甲 / `throwable` 投掷物 / `utility` 工具。
+**分类枚举**（7 类，**枚举顺序 = 分类栏顺序**：阵营商店置顶、荣誉商店垫底；语言键 `msb.shop.category.*`）：`faction` 阵营商店 / `guns` 枪械 / `ammo` 弹药 / `armor` 护甲 / `throwable` 投掷物 / `utility` 工具 / `honor` 荣誉商店。
+
+- **阵营商店**：条目可带 `"faction"`（`lonestar`/`valkyra`/`manticore`），**服务端按买家阵营过滤后再下发**——非本阵营的专属装备在客户端目录里根本不存在（改包也买不到）；不带 `faction` 的条目为通用（三阵营都可见，如免费格洛克17）。
+- **枪械**：主武器与副武器**合并**为一栏，用 `subtype`（`handgun`/`smg`/`rifle`/`sniper`/`shotgun`/`mg`/`launcher`）细分，界面上以**中栏顶部横向筛选条**呈现（只列当前目录里实际有货的子分类）。
+- **荣誉商店**：独立货币**荣誉点**结算（`HonorAttachments`，跨死亡保留，仅在该页签的右上角显示）；获得方式与内容待定（`honor.json` 为空 → 显示「暂无商品」）。
+- **欠款购买**：`faction` 与 `ammo` 两栏**允许欠款**（余额可为负，后续收入自动抵扣）；其余栏目仍需足额。余额可为负后，罚款不再有 `max(0,…)` 下限（否则等于凭空销账）。
 
 **条目格式**：
 
 ```json
 {
   "entries": [
-    { "item": "superbwarfare:hk_416", "price": 1450, "sell": 870, "weight": 3.5 },
-    { "item": "superbwarfare:rifle_ammo", "price": 8, "weight": 0.06 }
+    { "item": "superbwarfare:hk_416", "faction": "lonestar", "price": 1400, "sell": 840, "weight": 3.5 },
+    { "item": "superbwarfare:glock_17", "price": 0, "weight": 1.0 }
   ]
 }
 ```
@@ -68,7 +73,9 @@ ClientShopData（客户端缓存）──► ShopScreen（自绘：分类/列表
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `item` | ✔ | SBW（或任意）物品注册名；`BuiltInRegistries.ITEM` 不存在 → 跳过并 log warn |
-| `price` | ✔ | 买入价（整数 $，≥1；负数/0 → 跳过并 log warn） |
+| `faction` | ✘ | 阵营归属（仅阵营商店使用；未知阵营名 → 跳过并 log warn） |
+| `subtype` | ✘ | 枪械子分类（枪械栏建议必填；未知值 → 跳过并 log warn；缺失时仅出现在「全部」下） |
+| `price` | ✔ | 买入价（整数 $，≥0；**0 = 免费**；负数 → 跳过并 log warn） |
 | `sell` | ✘ | 卖出价，缺省 = `price × Config.shopSellRatio`（默认 0.6，四舍五入） |
 | `weight` | ✔ | 单件负重（kg，float，≥0） |
 
@@ -146,12 +153,12 @@ ClientShopData（客户端缓存）──► ShopScreen（自绘：分类/列表
 |---|---|---|---|
 | 整窗 | 470 × 260 | 940 × 520 | 居中，`fill` 深色半透明 + 1px 描边 |
 | 顶栏 | 470 × 22 | 940 × 44 | 左：标题「军火商店 ARMORY」；右：余额（金色） |
-| 分类栏 | 72 × 212 | 144 × 424 | 6 分类纵向列表；选中 = 左缘金色条 + 金色文字 |
-| 商品滚动格 | 212 × 112 | 424 × 224 | **6 列滚动格**（格 28×28：物品图标 16 + 价格小字）；左键选中、双击快速购买、滚轮滚动 |
+| 分类栏 | 72 × 212 | 144 × 424 | 7 分类纵向列表（阵营商店置顶、荣誉商店垫底）；选中 = 左缘金色条 + 金色文字 |
+| 商品滚动格 | 212 × 112 | 424 × 224 | 顶部**枪械子分类筛选条**（仅枪械栏；`全部` + 有货的子分类，超宽自动折行）；下方 **6 列滚动格**（格 28×28：物品图标 16 + 金色价格小字）；左键选中、双击快速购买、滚轮滚动 |
 | 购买/出售面板 | 97 × 96 | 196 × 192 | 中栏**左下**（随选中对象切换）：商品 → 数量步进 + 合计 + [购买]；储存格堆叠 → 收入 + [取回背包][卖出]；玩家物品 → 收入 + [存入储存格][卖出]；底部禁用原因 |
 | 储存格 | 101 × 96 | 202 × 192 | 中栏**右下**：**5 列滚动格**（共 `shopStorageSlots` = 60 格）；**绿框 = 可无损卖回**（新购脉冲高亮），数量角标 |
 | 玩家背包 | 168 × 212 | 336 × 424 | 右栏映射 **MC 原生槽位**：装备栏（头盔/胸甲/护腿/靴子/副手，3×2；槽位名以副标题标注）、饰品栏（3 格占位，P1 接入 Curios 后开放）、物品栏（27，9×3）、快捷栏（9，9×1） |
-| 底栏 | 470 × 20 | 940 × 40 | 左：操作提示；右：`负重 20.2 / 24.0 kg` + 细条（≥60% 琥珀、≥100% 红） |
+| 底栏 | 470 × 20 | 940 × 40 | 右：`负重 20.2 / 24.0 kg` + 细条（≥60% 琥珀、≥100% 红）；左侧留空（操作提示类文案已按用户要求移除） |
 
 **窗口自适应放大（2026-10-01 追加）**：整窗按当前 GUI 尺寸**等比缩放绘制**——目标占屏 94%，缩放钳制 0.6~1.75 并取 1/8 步进；小窗口自动缩小（不裁切），大屏适当放大（1920×1080 实测：GUI Scale 2 ≈ **1.75×**、Scale 3 ≈ **1.25×**、Scale 4 ≈ 1.0× 近满屏）。实现：`pose.pushPose/translate/scale` 包裹整窗绘制 + 鼠标坐标逆变换（`(screen-origin)/k`）+ scissor 手动换算；tooltip 在屏幕空间绘制、用原始鼠标坐标。
 
@@ -159,19 +166,27 @@ ClientShopData（客户端缓存）──► ShopScreen（自绘：分类/列表
 
 **交互清单**（与 HTML 原型一一对应）：
 
-1. 点击商品格 → 选中（金框 + 面板切换为购买）；**双击 = 直接弹确认购买**；滚轮滚动商品格；
-2. 点击储存格 / 玩家栏槽位 → 选中（金框；储存格绿框保留）；面板切换为出售/转移；
-3. 数量步进 `[-] [n] [+]` + `MAX`（购买上限 = 余额与储存格余量的较小值；出售/转移上限 = 所选堆叠数量）；
-4. `[购买]` / `[卖出]` → **确认弹窗**（数量、合计、余额变化、负重变化；购买额外显示「去向：存入储存格（负重不变）」「绿框 n 件」）；
-5. `[取回背包]` / `[存入储存格]` → 即时转移（无弹窗）→ toast 反馈；
-6. 确认 → 发 `ShopTradePayload` → 服务端回执 → 成功 toast（含金额 / 无损件数）/ 失败 toast（含原因）；余额、负重、储存格、绿框实时刷新；
-7. 禁用态：余额不足 / 储存格已满 / 负重超限（取回）/ 背包已满 / 不可收购 → 按钮变灰 + 下方红字原因（服务端仍兜底校验）。
+**鼠标手势（2026-10-01 最终版：已取消「物品跟随鼠标」拖拽态）**：
 
-**绿框视觉**：储存格中 `refund > 0` 的堆叠画**亮绿 2px 内描边**；新购后脉冲发光 3 次；tooltip 显示「绿框：n 件可无损卖回（100%）」；储存格标题栏常驻图例「绿框 = 可无损卖回」。
+| 操作 | 行为 |
+|---|---|
+| 左键点商品格 | 选中（金框；面板切为购买）；**双击 = 直接购买**（数量取面板步进值，`Ctrl` + 双击只买 1 件） |
+| 左键点储存格堆叠 | 单击**选中**；**双击 = 取出**该堆叠（自动入包，无精确落点） |
+| 左键点玩家栏物品 | 单击**选中**；**双击 = 存入**该堆叠到储存格 |
+| `Ctrl` + 左键 | **整组**取出 / 存入（该物品的全部堆叠，逐堆请求、服务端各自校验） |
+| 右键点任意物品格 | **卖回商店**（储存格按绿框无损 / 其余六折；整堆成交） |
+| 滚轮 | 商品格 / 储存格各自滚动 |
+
+1. 点击对象即选中 → 面板切换为购买或出售/转移（不改变任何数据，只有上面表中的手势才发请求）；
+2. 数量步进 `[-] [n] [+]` + `MAX`（购买上限 = 余额与储存格余量的较小值，欠款栏不受余额限制；出售/转移上限 = 所选堆叠数量）；
+3. **无确认弹窗**：按钮与手势**直接执行** → toast 反馈结果；余额、负重、储存格、绿框随服务端回执刷新；
+4. 禁用态：余额不足 / 储存格已满 / 负重超限（取回）/ 背包已满 / 不可收购 → 按钮变灰 + 下方红字原因（服务端仍兜底校验）。
+
+**绿框视觉**：储存格中 `refund > 0` 的堆叠画**亮绿 2px 内描边**（新购后脉冲发光 3 次）；tooltip 显示「绿框：n 件可按原价卖回」。**口径**：购买后未取出的件数可无损卖回（100%），一旦取回背包即失效（转六折），玩家自己的物品存入也不获得绿框。
 
 **渲染规范**：全部 `fill` 矩形 + `drawString` + `renderItem`（真实物品图标 + `renderItemDecorations` 数量角标）+ `renderTooltip`（1.21.1 原生）；色板沿用战术地图深色系（面板 `0xE0101010`、描边 `0x50FFFFFF`、选中/价格金 `0xFFF2B13C`、绿框 `0xFF4ADE80`、危险 `0xFFFF5A4D`）；无贴图、无第三方库；文本全部走语言键。
 
-**状态**：载入中（目录未到）→ 骨架格；空槽 → 装备/饰品槽显示角色标签（头盔/胸甲/…）、其余空槽正常底色；选中失效（被卖光/取空）→ 回落「点击…」占位提示。
+**状态**：载入中（目录未到）→ 居中提示「等待商店目录…」；空槽 → 装备/饰品槽显示角色标签（头盔/胸甲/…）、其余空槽正常底色；空分类 / 空筛选结果 → 居中「暂无商品」；选中失效（被卖光/取空）→ 自动清除选中。
 
 ---
 
@@ -213,7 +228,16 @@ ClientShopData（客户端缓存）──► ShopScreen（自绘：分类/列表
 
 ## 9. 语言 key 清单（`MsbLanguageProvider`，en + zh 双份，datagen）
 
-`key.msb.shop`（"Armory"/"军火商店"）· `msb.shop.title` · `msb.shop.category.primary/secondary/ammo/armor/throwable/utility` · `msb.shop.balance` · `msb.shop.weight`（"%s / %s kg"）· `msb.shop.price` · `msb.shop.sell_price`（六折价）· `msb.shop.qty` · `msb.shop.max` · `msb.shop.total` · `msb.shop.buy` · `msb.shop.sell` · `msb.shop.take`（"取回背包"）· `msb.shop.store`（"存入储存格"）· `msb.shop.storage`（"储存格 %s/%s"）· `msb.shop.refund_legend`（"绿框 = 可无损卖回"）· `msb.shop.refund_tip`（"%s 件可无损卖回（100%）"）· `msb.shop.unsellable` · `msb.shop.loading` · `msb.shop.hint` · `msb.shop.group.equip/acc/main/hotbar` · `msb.shop.slot.head/chest/plate/primary/secondary/melee/charm/goggles/terminal`（装备/饰品槽位标签）· `msb.shop.confirm.buy` / `.sell` · `msb.shop.confirm.to_storage`（"存入储存格（负重不变）"）· `msb.shop.confirm.refund_n`（"绿框 %s 件"）· `msb.shop.confirm.balance_after` · 结果：`msb.shop.result.bought`（"已购买 %s ×%s · -%s（已存入储存格）"）/ `.sold` / `.sold_refund`（"（含无损 %s 件）"）/ `.taken`（"已取回 %s ×%s（绿框已失效）"）/ `.stored` · 错误：`msb.shop.error.no_balance` / `.storage_full` / `.bag_full` / `.over_weight` / `.not_enough` / `.unsellable` / `.unknown_item` / `.bad_count` / `.no_catalog`（服务端返回枚举码，客户端本地化）。
+`key.msb.shop`（"Armory"/"军火商店"）· `msb.shop.title`
+
+- **分类与子分类**：`msb.shop.category.faction/guns/ammo/armor/throwable/utility/honor` · `msb.shop.gun.handgun/smg/rifle/sniper/shotgun/mg/launcher` · `msb.shop.filter.all`（"全部"）· `msb.shop.honor`（"荣誉 %s"）· `msb.shop.empty`（"暂无商品"）
+- **分区标题**：`msb.shop.group.equip/acc/main/hotbar` · `msb.shop.equip.labels`（"头盔/胸甲/护腿/靴子/副手"）· `msb.shop.storage`（"储存格 %s/%s"）
+- **面板与提示**：`msb.shop.price_line`（"单价 %s"）· `msb.shop.total`（"合计 %s"）· `msb.shop.income`（"收入 %s"）· `msb.shop.held.line`（"持有 %s · 可无损 %s"）· `msb.shop.held.unsellable` · `msb.shop.held_count`（"%s 件"）· `msb.shop.tip.weight` / `.tip.sell` · `msb.shop.refund_tip`（"绿框：%s 件可按原价卖回"）· `msb.shop.unsellable` · `msb.shop.loading`
+- **按钮**：`msb.shop.buy` / `.sell` / `.take`（"取回背包"）/ `.store`（"存入储存格"）
+- **结果**：`msb.shop.result.bought` / `.sold` / `.sold_refund`（"（含无损 %s 件）"）/ `.taken` / `.stored` / `.failed`
+- **错误**（服务端返回枚举码，客户端本地化）：`msb.shop.error.no_balance` / `.storage_full` / `.bag_full` / `.over_weight` / `.not_enough` / `.unsellable` / `.unknown_item` / `.bad_count` / `.no_catalog`
+
+（配合移除交互提示与确认弹窗，`msb.shop.hint`、`msb.shop.confirm.*`、`msb.shop.refund_legend`、`msb.shop.balance`、`msb.shop.weight`、`msb.shop.slot.*` 等 key 已删除。）
 
 ---
 
@@ -221,16 +245,17 @@ ClientShopData（客户端缓存）──► ShopScreen（自绘：分类/列表
 
 **新建**：
 
-- `src/main/java/com/mercenarysandbox/msb/shop/ShopCategory.java` / `ShopEntry.java` / `ShopCode.java` / `ShopCatalog.java` / `ShopManager.java` / `WeightService.java`
+- `src/main/java/com/mercenarysandbox/msb/shop/ShopCategory.java` / `GunType.java` / `ShopEntry.java` / `ShopCode.java` / `ShopCatalog.java` / `ShopManager.java` / `WeightService.java`
+- `src/main/java/com/mercenarysandbox/msb/economy/HonorAttachments.java`（荣誉点，跨死亡保留）
 - `src/main/java/com/mercenarysandbox/msb/shop/ShopStorage.java`（储存格堆叠 record `{itemId, count, refund}` + Codec）· `ShopStorageAttachments.java`（**per-player DataAttachment** 注册，序列化 + `copyOnDeath`，跨重连/死亡保留）
 - `src/main/java/com/mercenarysandbox/msb/network/ShopDataPayload.java` / `ShopStoragePayload.java` / `ShopTradePayload.java` / `ShopResultPayload.java`
 - `src/main/java/com/mercenarysandbox/msb/client/ShopScreen.java` / `ClientShopData.java`
-- `src/main/resources/data/msb/shop/{primary,secondary,ammo,armor,throwable,utility}.json`（初始目录）
+- `src/main/resources/data/msb/shop/{faction,guns,ammo,armor,throwable,utility,honor}.json`（初始目录，共 36 条）
 
 **修改**：
 
-- `MsbNetwork`（3 载荷注册，PROTOCOL_VERSION→"2"）；`MsbServerEvents`（join 后发目录、重载重发、每 20 tick 负重兜底）
-- `MercenarySandboxShooter`（注册 `ShopStorageAttachments` 附体）
+- `MsbNetwork`（4 载荷注册，PROTOCOL_VERSION→"3"）；`MsbServerEvents`（join 后发目录、重载重发、每 20 tick 负重兜底）
+- `MercenarySandboxShooter`（注册 `ShopStorageAttachments`、`HonorAttachments` 附体）
 - `MsbKeyMappings` + `MsbClientEvents`（B 键开关）
 - `Config`（§8 六项）；`MsbHudOverlay`（顶栏负重显示）
 - `MsbLanguageProvider`（§9 全部 key）→ `runData` 后 `gradlew build`
@@ -241,12 +266,16 @@ ClientShopData（客户端缓存）──► ShopScreen（自绘：分类/列表
 
 ## 11. 验收标准
 
-1. 单机闭环：B 开商店 → 买 HK-416（扣款、**存入储存格并亮绿框脉冲、负重不变**）→ **取回背包**（+3.5kg、绿框失效）→ 卖出（六折）→ 另买一件**不动它、直接从储存格无损卖回**（100%）→ 余额/负重/储存格实时正确；
-2. 拒绝路径：余额不足 / 储存格已满 / 取回超重 / 背包已满 / 不可收购，均被拒且提示明确；
-3. 多人：目录 join 同步；他人看不到你的钱包与储存格（个人数据单人发送）；改包（改价格/负数/超量/槽位错位）被服务端拒绝；
-4. `/reload`（或换 datapack）后目录刷新且在线玩家即时收到；
-5. 负重回落到 60% 以下时移速恢复（修饰符无残留）；
-6. 死亡后：配装掉落、现金保留、基地复活照常（M1 回归）；**储存格内容跨死亡与重连保持**。
+1. 单机闭环：B 开商店 → 买 HK-416（扣款、**存入储存格并亮绿框脉冲、负重不变**）→ **双击取出**（自动入包、+3.5kg、绿框失效）→ 右键卖出（六折）→ 另买一件**不动它、直接在储存格右键无损卖回**（100%）→ 余额/负重/储存格实时正确；
+2. 手势：单击选中、**双击执行**（商品格 = 购买 / 储存格 = 取出 / 玩家栏 = 存入）、右键卖回、`Ctrl`+左键整组取出/存入，且**无物品跟随鼠标**；
+3. 阵营商店：本阵营专属装备可见可买、其他阵营的同名条目在目录中不存在（换阵营后目录刷新）；免费格洛克17 三个阵营都能领；
+4. 欠款：阵营/弹药栏余额为 0 仍可买（余额转负）、击杀收入自动抵扣、罚款不再把欠款抹平；
+5. 枪械栏筛选条：只列有货的子分类、切换只刷新商品格；`subtype` 缺失的枪仅出现在「全部」下并 log warn；
+6. 拒绝路径：非欠款栏余额不足 / 储存格已满 / 取回超重 / 背包已满 / 不可收购，均被拒且提示明确；
+7. 多人：目录 join 同步；他人看不到你的钱包与储存格（个人数据单人发送）；改包（改价格/负数/超量/槽位错位）被服务端拒绝；
+8. `/reload`（或换 datapack）后目录刷新且在线玩家即时收到；
+9. 负重回落到 60% 以下时移速恢复（修饰符无残留）；
+10. 死亡后：配装掉落、现金保留、基地复活照常（M1 回归）；**储存格内容与荣誉点跨死亡与重连保持**。
 
 ---
 
@@ -262,47 +291,53 @@ ClientShopData（客户端缓存）──► ShopScreen（自绘：分类/列表
 | 6 | 出售范围 | **仅目录内物品可售** | 目录外物品按材料价回收（需全物品价格表，P1） |
 | 7 | 死亡掉装 | **原版掉落 + 现金与储存格保留** | M2 即做保险券/指定保留（P1 原计划） |
 | 8 | 数值 | 负重上限 24kg、六折 60%、无损 100%、储存格 60 格、满负重 -20% 移速 | 可按测试反馈调 |
+| 9 | 阵营商店内容 | **本阵营专属装备（服务端过滤）** + 免费格洛克17（通用条目，三阵营可见） | 三阵营装备同时展示 / 空栏目占位 |
+| 10 | 荣誉商店货币 | **新增荣誉点（独立货币，仅该页签可见，获得方式待定）** | 复用现金 / 空栏目占位 |
+| 11 | 欠款购买 | **仅阵营商店 + 弹药商店**可欠款（无上限）；罚款/奖励不再有 0 下限 | 加欠款上限 / 全面开放欠款 |
+| 12 | 鼠标交互 | **取消「物品跟随鼠标」**：左键取出/存入、右键卖回、`Ctrl`+左键整组 | 保留拖拽并可指定落点 |
 
 ---
 
-## 附：初始商品目录（35 项，初版平衡值；已与 SBW 0.8.9.1-final jar 语言文件逐一核对）
+## 附：初始商品目录（36 项，初版平衡值；已与 SBW 0.8.9.1-final jar 语言文件逐一核对）
 
-| 分类 | 物品（注册名） | 名称 | 价 $ | 负重 kg |
-|---|---|---|---|---|
-| primary | mp_5 | MP5冲锋枪 | 850 | 2.6 |
-| primary | m_870 | M870霰弹枪 | 900 | 3.2 |
-| primary | sks | SKS射手步枪 | 800 | 3.8 |
-| primary | ak_47 | AK-47突击步枪 | 1100 | 3.6 |
-| primary | m_4 | M4A1卡宾枪 | 1250 | 3.2 |
-| primary | ak_12 | AK-12突击步枪 | 1300 | 3.4 |
-| primary | hk_416 | Hk-416突击步枪 | 1450 | 3.5 |
-| primary | mk_14 | MK-14EBR射手步枪 | 1600 | 4.0 |
-| primary | svd | SVD狙击步枪 | 1900 | 4.5 |
-| primary | m_60 | M60通用机枪 | 2000 | 6.5 |
-| primary | rpg | RPG-7火箭筒 | 2400 | 6.0 |
-| secondary | m_1911 | M1911手枪 | 280 | 0.9 |
-| secondary | glock_17 | 格洛克17手枪 | 300 | 1.0 |
-| secondary | mp_443 | MP-443手枪 | 320 | 0.95 |
-| secondary | glock_18 | 格洛克18手枪 | 520 | 1.1 |
-| ammo | handgun_ammo | 手枪弹药 | 6 | 0.05 |
-| ammo | handgun_ammo_box | 盒装手枪弹药 | 70 | 0.5 |
-| ammo | rifle_ammo | 步枪弹药 | 8 | 0.06 |
-| ammo | rifle_ammo_box | 盒装步枪弹药 | 95 | 0.6 |
-| ammo | shotgun_ammo_box | 盒装霰弹枪弹药 | 85 | 0.6 |
-| ammo | sniper_ammo | 狙击枪弹药 | 15 | 0.08 |
-| armor | ge_helmet_m_35 | 德国M35头盔 | 350 | 1.2 |
-| armor | us_helmet_pasgt | 美制PASGT头盔 | 420 | 1.4 |
-| armor | ru_helmet_6b47 | 俄罗斯6B47头盔 | 480 | 1.3 |
-| armor | armor_plate | 防弹插板 | 300 | 1.8 |
-| armor | us_chest_iotv | 美制IOTV防弹胸甲 | 850 | 5.5 |
-| armor | ru_chest_6b43 | 俄罗斯6B43防弹胸甲 | 920 | 6.0 |
-| throwable | m18_smoke_grenade | M18烟雾弹 | 120 | 0.5 |
-| throwable | hand_grenade | M67手榴弹 | 150 | 0.45 |
-| throwable | rgo_grenade | RGO手榴弹 | 180 | 0.5 |
-| throwable | c4_bomb | C4炸药 | 450 | 1.2 |
-| utility | knife | 军刀 | 100 | 0.5 |
-| utility | medical_kit | 医疗包 | 260 | 1.0 |
-| utility | defuser | 拆弹器 | 500 | 1.0 |
-| utility | repair_tool | 维修工具 | 600 | 2.0 |
+| 分类 | 子分类 / 阵营 | 物品（注册名） | 名称 | 价 $ | 负重 kg |
+|---|---|---|---|---|---|
+| faction | 通用（免费） | glock_17 | 格洛克17手枪 | 0 | 1.0 |
+| faction | lonestar | hk_416 | Hk-416突击步枪 | 1400 | 3.5 |
+| faction | lonestar | m_60 | M60通用机枪 | 1950 | 6.5 |
+| faction | valkyra | ak_12 | AK-12突击步枪 | 1250 | 3.4 |
+| faction | valkyra | svd | SVD狙击步枪 | 1850 | 4.5 |
+| faction | manticore | m_4 | M4A1卡宾枪 | 1200 | 3.2 |
+| faction | manticore | mk_14 | MK-14EBR射手步枪 | 1550 | 4.0 |
+| guns | handgun | m_1911 | M1911手枪 | 280 | 0.9 |
+| guns | handgun | mp_443 | MP-443手枪 | 320 | 0.95 |
+| guns | handgun | glock_18 | 格洛克18手枪 | 520 | 1.1 |
+| guns | smg | mp_5 | MP5冲锋枪 | 850 | 2.6 |
+| guns | smg | vector | 短剑冲锋枪 | 950 | 2.4 |
+| guns | rifle | sks | SKS射手步枪 | 800 | 3.8 |
+| guns | rifle | ak_47 | AK-47突击步枪 | 1100 | 3.6 |
+| guns | rifle | qbz_95 | 95式突击步枪 | 1050 | 3.5 |
+| guns | rifle | qbz_191 | QBZ-191突击步枪 | 1350 | 3.3 |
+| guns | shotgun | m_870 | M870霰弹枪 | 900 | 3.2 |
+| guns | launcher | rpg | RPG-7火箭筒 | 2400 | 6.0 |
+| ammo | — | handgun_ammo_box | 盒装手枪弹药 | 70 | 0.1 |
+| ammo | — | rifle_ammo_box | 盒装步枪弹药 | 95 | 0.1 |
+| ammo | — | shotgun_ammo_box | 盒装霰弹枪弹药 | 85 | 0.1 |
+| ammo | — | sniper_ammo_box | 盒装狙击枪弹药 | 150 | 0.1 |
+| armor | — | ge_helmet_m_35 | 德国M35头盔 | 350 | 1.2 |
+| armor | — | us_helmet_pasgt | 美制PASGT头盔 | 420 | 1.4 |
+| armor | — | ru_helmet_6b47 | 俄罗斯6B47头盔 | 480 | 1.3 |
+| armor | — | armor_plate | 防弹插板 | 300 | 1.8 |
+| armor | — | us_chest_iotv | 美制IOTV防弹胸甲 | 850 | 5.5 |
+| armor | — | ru_chest_6b43 | 俄罗斯6B43防弹胸甲 | 920 | 6.0 |
+| throwable | — | m18_smoke_grenade | M18烟雾弹 | 120 | 0.5 |
+| throwable | — | hand_grenade | M67手榴弹 | 150 | 0.45 |
+| throwable | — | rgo_grenade | RGO手榴弹 | 180 | 0.5 |
+| throwable | — | c4_bomb | C4炸药 | 450 | 1.2 |
+| utility | — | knife | 军刀 | 100 | 0.5 |
+| utility | — | medical_kit | 医疗包 | 260 | 1.0 |
+| utility | — | defuser | 拆弹器 | 500 | 1.0 |
+| utility | — | repair_tool | 维修工具 | 600 | 2.0 |
+| honor | — | *（空）* | 内容与获得方式待定 | — | — |
 
-> 全部为 `superbwarfare:` 注册名（已从 SBW 0.8.9.1-final jar 语言文件核对存在）；弹药散装/盒装的堆叠粒度在实现时按 SBW 实际物品语义最终核对（价格表以「1 件物品」为单位，与原型 mock 一致）。
+> 全部为 `superbwarfare:` 注册名（已从 SBW 0.8.9.1-final jar 语言文件核对存在）；**弹药仅售盒装**（散装不可买、也不可售）；6 件阵营专属枪械只在本阵营商店可见（通用「枪械」栏不再重复上架）。

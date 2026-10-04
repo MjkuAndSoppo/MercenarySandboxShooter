@@ -1,8 +1,10 @@
 package com.mercenarysandbox.msb.shop;
 
 import com.mercenarysandbox.msb.Config;
+import com.mercenarysandbox.msb.economy.HonorAttachments;
 import com.mercenarysandbox.msb.economy.PlayerWallet;
 import com.mercenarysandbox.msb.economy.WalletAttachments;
+import com.mercenarysandbox.msb.network.ShopDataPayload;
 import com.mercenarysandbox.msb.network.ShopResultPayload;
 import com.mercenarysandbox.msb.network.ShopStoragePayload;
 import com.mercenarysandbox.msb.network.ShopTradePayload;
@@ -60,6 +62,7 @@ public final class ShopManager {
             case SELL -> sell(player, payload);
             case TAKE -> take(player, payload);
             case STORE -> store(player, payload);
+            case SWAP_HOTBAR -> swapHotbar(player, payload);
         }
     }
 
@@ -87,14 +90,29 @@ public final class ShopManager {
             return;
         }
         PlayerWallet wallet = player.getData(WalletAttachments.WALLET);
-        // 阵营商店 / 弹药商店允许欠款购买（余额可为负，后续收入自动抵扣），其余分类仍需足额
-        if (!creditAllowed(entry) && wallet.total() < cost) {
-            result(player, p.action(), ShopCode.NO_BALANCE, p.item(), count, 0, 0);
-            return;
-        }
         ShopStorage storage = storage(player);
         if (storageRoom(storage, entry.item()) < count) {
             result(player, p.action(), ShopCode.STORAGE_FULL, p.item(), count, 0, 0);
+            return;
+        }
+        // 荣誉商店：以荣誉点结算（不扣现金、不产生绿框无损额度）；条目禁止卖回（见 sell）
+        if (entry.category() == ShopCategory.HONOR) {
+            int honor = player.getData(HonorAttachments.HONOR);
+            if (honor < cost) {
+                result(player, p.action(), ShopCode.NO_HONOR, p.item(), count, 0, 0);
+                return;
+            }
+            addToStorage(storage, entry.item(), count, 0);
+            player.setData(HonorAttachments.HONOR, honor - (int) cost);
+            result(player, p.action(), ShopCode.OK, entry.item(), count, -(int) cost, 0);
+            syncStorage(player);
+            // 复用目录载荷刷新客户端荣誉点（其携带 honorPoints 字段）
+            PacketDistributor.sendToPlayer(player, ShopDataPayload.from(ShopCatalog.INSTANCE, player));
+            return;
+        }
+        // 阵营商店 / 弹药商店允许欠款购买（余额可为负，后续收入自动抵扣），其余分类仍需足额
+        if (!creditAllowed(entry) && wallet.total() < cost) {
+            result(player, p.action(), ShopCode.NO_BALANCE, p.item(), count, 0, 0);
             return;
         }
         // 执行：入储存格（购买件数全额计入无损额度）→ 扣款（花销 +cost，总资产 -cost）
@@ -112,8 +130,13 @@ public final class ShopManager {
             result(player, p.action(), ShopCode.BAD_COUNT, p.item(), count, 0, 0);
             return;
         }
-        ShopEntry entry = ShopCatalog.INSTANCE.find(p.item());
+        ShopEntry entry = ShopCatalog.INSTANCE.entryFor(p.item());
         if (entry == null) {
+            result(player, p.action(), ShopCode.UNSELLABLE, p.item(), count, 0, 0);
+            return;
+        }
+        // 荣誉商店条目以荣誉点计价，禁止卖回换现金（防套现）
+        if (entry.category() == ShopCategory.HONOR) {
             result(player, p.action(), ShopCode.UNSELLABLE, p.item(), count, 0, 0);
             return;
         }
@@ -171,7 +194,7 @@ public final class ShopManager {
             return;
         }
         ResourceLocation item = stack.item();
-        ShopEntry entry = ShopCatalog.INSTANCE.find(item);
+        ShopEntry entry = ShopCatalog.INSTANCE.entryFor(item);
         if (entry != null
                 && WeightService.total(player) + entry.weight() * count > Config.LOADOUT_WEIGHT_LIMIT_KG.get()) {
             result(player, p.action(), ShopCode.OVER_WEIGHT, item, count, 0, 0);
@@ -190,7 +213,7 @@ public final class ShopManager {
         if (stack.count() <= 0) {
             storage.remove(p.slot());
         }
-        addToPlayer(player, template, count, p.targetSlot());
+        addToPlayer(player, template, count);
         WeightService.apply(player);
         result(player, p.action(), ShopCode.OK, item, count, 0, 0);
         syncStorage(player);
@@ -223,13 +246,104 @@ public final class ShopManager {
         syncStorage(player);
     }
 
+    // ===== 快捷栏对调（大键盘 1~9：把选中槽位与快捷栏对应格互换） =====
+
+    /**
+     * 把「选中槽位（zone/slot）」与快捷栏第 {@code count} 格对调（count = 0..8）。
+     * 支持玩家栏四区与储存格；目标格可为空（等效搬运）。储存格来源见 {@link #swapStorageHotbar}。
+     */
+    private static void swapHotbar(ServerPlayer player, ShopTradePayload p) {
+        int hotbar = p.count();
+        if (hotbar < 0 || hotbar > 8) {
+            result(player, p.action(), ShopCode.BAD_COUNT, p.item(), p.count(), 0, 0);
+            return;
+        }
+        Inventory inv = player.getInventory();
+        if (p.zone() == ShopTradePayload.Zone.STORAGE) {
+            swapStorageHotbar(player, inv, hotbar, p);
+            return;
+        }
+        ItemStack source = playerStack(player, p.zone(), p.slot());
+        if (source.isEmpty() || !itemId(source).equals(p.item())) {
+            result(player, p.action(), ShopCode.NOT_ENOUGH, p.item(), p.count(), 0, 0);
+            return;
+        }
+        if (p.zone() == ShopTradePayload.Zone.HOTBAR && p.slot() == hotbar) {
+            return;   // 同一格：无操作
+        }
+        ItemStack target = inv.items.get(hotbar).copy();
+        setPlayerStack(inv, p.zone(), p.slot(), target);
+        inv.items.set(hotbar, source.copy());
+        inv.setChanged();
+        WeightService.apply(player);
+        result(player, p.action(), ShopCode.OK, p.item(), hotbar + 1, 0, 0);
+    }
+
+    /**
+     * 储存格堆叠 ↔ 快捷栏：被换出的储存格堆叠按正常取出处理（无损额度失效），
+     * 快捷栏物品回存储存格（不获得无损额度）；先摘除再回存以腾出格位，保证必定放得下。
+     */
+    private static void swapStorageHotbar(ServerPlayer player, Inventory inv, int hotbar, ShopTradePayload p) {
+        ShopStorage storage = storage(player);
+        ShopStorage.Stack stored = storage.get(p.slot());
+        if (stored == null || !stored.item().equals(p.item())) {
+            result(player, p.action(), ShopCode.NOT_ENOUGH, p.item(), p.count(), 0, 0);
+            return;
+        }
+        ItemStack template = templateOf(stored.item());
+        if (template.isEmpty()) {
+            result(player, p.action(), ShopCode.UNKNOWN_ITEM, p.item(), p.count(), 0, 0);
+            return;
+        }
+        ResourceLocation storedItem = stored.item();
+        int storedCount = stored.count();
+        ItemStack hotbarStack = inv.items.get(hotbar).copy();
+        storage.remove(p.slot());
+        if (!hotbarStack.isEmpty()) {
+            addToStorage(storage, itemId(hotbarStack), hotbarStack.getCount(), 0);
+        }
+        inv.items.set(hotbar, template.copyWithCount(storedCount));
+        inv.setChanged();
+        WeightService.apply(player);
+        result(player, p.action(), ShopCode.OK, storedItem, hotbar + 1, 0, 0);
+        syncStorage(player);
+    }
+
+    /** 写入玩家栏指定区/槽位（护甲按展示顺序映射到 armor 下标） */
+    private static void setPlayerStack(Inventory inv, ShopTradePayload.Zone zone, int slot, ItemStack value) {
+        switch (zone) {
+            case ARMOR -> {
+                if (slot >= 0 && slot < ARMOR_ORDER.length) {
+                    inv.armor.set(ARMOR_ORDER[slot], value);
+                }
+            }
+            case OFFHAND -> {
+                if (slot == 0) {
+                    inv.offhand.set(0, value);
+                }
+            }
+            case MAIN -> {
+                if (slot >= 0 && slot < 27) {
+                    inv.items.set(slot + 9, value);
+                }
+            }
+            case HOTBAR -> {
+                if (slot >= 0 && slot < 9) {
+                    inv.items.set(slot, value);
+                }
+            }
+            case STORAGE -> {
+            }
+        }
+    }
+
     // ===== 容器与钱包 =====
 
     public static ShopStorage storage(ServerPlayer player) {
         return player.getData(ShopStorageAttachments.STORAGE);
     }
 
-    /** 储存格可容纳件数：同物品堆叠余量 + （容量 - 已有堆叠数）× 64 */
+    /** 储存格可容纳件数：同物品堆叠余量 + （容量 - 已有堆叠数）× 该物品单格上限 */
     public static int storageRoom(ShopStorage storage, ResourceLocation item, int maxSlots) {
         int room = 0;
         for (ShopStorage.Stack s : storage.stacks()) {
@@ -237,7 +351,7 @@ public final class ShopManager {
                 room += s.room();
             }
         }
-        room += Math.max(0, maxSlots - storage.stacks().size()) * ShopStorage.MAX_STACK;
+        room += Math.max(0, maxSlots - storage.stacks().size()) * ShopStorage.maxStackOf(item);
         return room;
     }
 
@@ -245,8 +359,9 @@ public final class ShopManager {
         return storageRoom(storage, item, Config.SHOP_STORAGE_SLOTS.get());
     }
 
-    /** 入库：先合并同物品堆叠，再开新堆叠（refund = 本次新增的无损额度件数） */
+    /** 入库：先合并同物品堆叠，再开新堆叠（每格上限取物品自身最大堆叠，枪械等不可堆叠物品独占一格） */
     private static void addToStorage(ShopStorage storage, ResourceLocation item, int count, int refund) {
+        int cap = ShopStorage.maxStackOf(item);
         int remaining = count;
         for (ShopStorage.Stack s : storage.stacks()) {
             if (remaining <= 0) {
@@ -268,7 +383,7 @@ public final class ShopManager {
             remaining -= put;
         }
         while (remaining > 0 && storage.stacks().size() < Config.SHOP_STORAGE_SLOTS.get()) {
-            int put = Math.min(ShopStorage.MAX_STACK, remaining);
+            int put = Math.min(cap, remaining);
             int credit = Math.min(put, refund);
             storage.stacks().add(new ShopStorage.Stack(item, put, credit));
             refund -= credit;
@@ -276,41 +391,27 @@ public final class ShopManager {
         }
     }
 
-    /** 玩家物品栏（27）+ 快捷栏（9）可容纳件数 */
+    /** 玩家物品栏（27）+ 快捷栏（9）可容纳件数（空格按该物品单格上限计，枪械等一格仅 1 把） */
     private static int playerRoom(ServerPlayer player, ResourceLocation item) {
         Inventory inv = player.getInventory();
+        int cap = ShopStorage.maxStackOf(item);
         int room = 0;
         for (int idx : PLAYER_SLOT_ORDER) {
             ItemStack stack = inv.items.get(idx);
             if (stack.isEmpty()) {
-                room += ShopStorage.MAX_STACK;
+                room += cap;
             } else if (itemId(stack).equals(item)) {
-                room += Math.max(0, stack.getMaxStackSize() - stack.getCount());
+                room += Math.max(0, Math.min(stack.getMaxStackSize(), ShopStorage.MAX_STACK) - stack.getCount());
             }
         }
         return room;
     }
 
-    /**
-     * 入包：先尝试 {@code preferredSlot}（拖拽放下的目标格，0-8 快捷栏 / 9-35 物品栏），
-     * 余量再按「物品栏优先、其次快捷栏」自动合并与占位。
-     */
-    private static void addToPlayer(ServerPlayer player, ItemStack template, int count, int preferredSlot) {
+    /** 入包：按「物品栏优先、其次快捷栏」自动合并与占位（调用前已校验 {@link #playerRoom}） */
+    private static void addToPlayer(ServerPlayer player, ItemStack template, int count) {
         Inventory inv = player.getInventory();
+        int cap = Math.min(template.getMaxStackSize(), ShopStorage.MAX_STACK);
         int remaining = count;
-        if (preferredSlot >= 0 && preferredSlot < 36) {
-            ItemStack target = inv.getItem(preferredSlot);
-            if (target.isEmpty()) {
-                ItemStack placed = template.copyWithCount(Math.min(ShopStorage.MAX_STACK, remaining));
-                inv.setItem(preferredSlot, placed);
-                remaining -= placed.getCount();
-            } else if (ItemStack.isSameItemSameComponents(target, template)) {
-                int room = Math.max(0, Math.min(target.getMaxStackSize(), ShopStorage.MAX_STACK) - target.getCount());
-                int put = Math.min(room, remaining);
-                target.grow(put);
-                remaining -= put;
-            }
-        }
         for (int idx : PLAYER_SLOT_ORDER) {
             if (remaining <= 0) {
                 break;
@@ -333,7 +434,7 @@ public final class ShopManager {
             if (!inv.items.get(idx).isEmpty()) {
                 continue;
             }
-            ItemStack copy = template.copyWithCount(Math.min(ShopStorage.MAX_STACK, remaining));
+            ItemStack copy = template.copyWithCount(Math.min(cap, remaining));
             inv.setItem(idx, copy);
             remaining -= copy.getCount();
         }
@@ -354,6 +455,18 @@ public final class ShopManager {
 
     private static ResourceLocation itemId(ItemStack stack) {
         return BuiltInRegistries.ITEM.getKey(stack.getItem());
+    }
+
+    /**
+     * 单件估值（卖价口径，六折档）：目录未收录物品按默认条目（默认价 × 六折）估值。
+     * 用于死亡时把被杀阵营玩家的装备折算成赏金（docs/02 击杀结算）。
+     */
+    public static int itemValue(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return 0;
+        }
+        ShopEntry entry = ShopCatalog.INSTANCE.entryFor(itemId(stack));
+        return Math.max(0, entry.sellPrice(Config.SHOP_SELL_RATIO.get()));
     }
 
     private static ItemStack templateOf(ResourceLocation item) {
