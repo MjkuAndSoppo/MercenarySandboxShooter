@@ -26,9 +26,9 @@ public record ShopTradePayload(Action action, Zone zone, int slot, ResourceLocat
         EQUIP
     }
 
-    /** 来源/目标区：储存格 + 玩家栏四区 */
+    /** 来源/目标区：储存格 + 玩家栏四区 + Curios 饰品区（slot 为饰品槽扁平下标） */
     public enum Zone {
-        STORAGE, ARMOR, OFFHAND, MAIN, HOTBAR
+        STORAGE, ARMOR, OFFHAND, MAIN, HOTBAR, CURIOS
     }
 
     public static final Type<ShopTradePayload> TYPE =

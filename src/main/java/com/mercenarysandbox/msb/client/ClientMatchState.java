@@ -15,8 +15,19 @@ public final class ClientMatchState {
     private static int walletEarned;
     private static int walletSpent;
     private static int walletTotal;
+    /** 本人耐力百分比（0~1 浮点）：S2C StaminaPayload 更新；<0 表示尚未收到（HUD 回退到 foodLevel/20） */
+    private static float staminaPercent = -1.0F;
 
     private ClientMatchState() {
+    }
+
+    /** 本人耐力百分比（自绘耐力条精确读取；负数表示未收到，调用方自行回退） */
+    public static float getStaminaPercent() {
+        return staminaPercent;
+    }
+
+    public static void setStaminaPercent(float percent) {
+        staminaPercent = percent;
     }
 
     public static void setWallet(int earned, int spent, int total) {

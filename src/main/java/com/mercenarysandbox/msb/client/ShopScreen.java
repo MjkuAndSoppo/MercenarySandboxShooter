@@ -12,6 +12,7 @@ import com.mercenarysandbox.msb.shop.EquipType;
 import com.mercenarysandbox.msb.shop.GunType;
 import com.mercenarysandbox.msb.shop.ShopCategory;
 import com.mercenarysandbox.msb.shop.ShopCode;
+import com.mercenarysandbox.msb.shop.ShopManager;
 import com.mercenarysandbox.msb.shop.ShopSubtype;
 
 import net.minecraft.client.Minecraft;
@@ -625,12 +626,16 @@ public final class ShopScreen extends Screen {
         }
 
         drawText(g, Component.translatable("msb.shop.group.acc"), x, accGridY() - 10, C_TEXT_DIM);
-        for (int i = 0; i < 3; i++) {
+        List<ShopManager.CurioSlot> curios = curioSlots(player);
+        int accMaxX = rightX() + RIGHT_W - 4;
+        for (int i = 0; i < curios.size(); i++) {
             int cx = x + i * (SLOT + SLOT_GAP);
-            g.fill(cx, accGridY(), cx + SLOT, accGridY() + SLOT, 0x6014171D);
-            frame(g, cx, accGridY(), SLOT, SLOT, C_BORDER);
+            if (cx + SLOT > accMaxX) {
+                break;
+            }
+            drawSlot(g, playerStack(ShopTradePayload.Zone.CURIOS, i), cx, accGridY(), mouseX, mouseY,
+                    sel.kind == Kind.PLAYER && sel.zone == ShopTradePayload.Zone.CURIOS && sel.slot == i);
         }
-        
 
         ItemStack[] main = playerSlots(ShopTradePayload.Zone.MAIN, 27);
         drawText(g, Component.translatable("msb.shop.group.main"), x, mainGridY() - 10, C_TEXT_DIM);
@@ -664,8 +669,17 @@ public final class ShopScreen extends Screen {
     }
 
     private static ItemStack playerStack(ShopTradePayload.Zone zone, int slot) {
+        if (zone == ShopTradePayload.Zone.CURIOS) {
+            Player player = Minecraft.getInstance().player;
+            return player == null ? ItemStack.EMPTY : ShopManager.curioStack(player, slot);
+        }
         ItemStack[] slots = playerSlots(zone, zone == ShopTradePayload.Zone.ARMOR ? 4 : 1);
         return slot >= 0 && slot < slots.length ? slots[slot] : ItemStack.EMPTY;
+    }
+
+    /** 饰品区槽位（与商品/服务端同一扁平顺序） */
+    private static List<ShopManager.CurioSlot> curioSlots(Player player) {
+        return player == null ? List.of() : ShopManager.curioSlots(player);
     }
 
     /** 玩家栏槽位快照（护甲展示顺序：头盔/胸甲/护腿/靴子；副手；物品栏 27；快捷栏 9） */
@@ -1023,6 +1037,19 @@ public final class ShopScreen extends Screen {
                 return true;
             }
         }
+        // 玩家栏：饰品（Curios）
+        List<ShopManager.CurioSlot> curios = curioSlots(Minecraft.getInstance().player);
+        int accMaxX = rightX() + RIGHT_W - 4;
+        for (int i = 0; i < curios.size(); i++) {
+            int cx = colX() + i * (SLOT + SLOT_GAP);
+            if (cx + SLOT > accMaxX) {
+                break;
+            }
+            if (hit(mx, my, cx, accGridY(), SLOT, SLOT)) {
+                playerZoneClick(button, ctrl, ShopTradePayload.Zone.CURIOS, i);
+                return true;
+            }
+        }
         // 物品栏（目标格 = i + 9）
         for (int i = 0; i < 27; i++) {
             int cx = colX() + (i % 9) * (SLOT + SLOT_GAP);
@@ -1064,7 +1091,12 @@ public final class ShopScreen extends Screen {
         }
         selectPlayer(zone, slot);
         if (ctrl) {
-            storeAll(itemIdOf(stack));
+            // 饰品槽只有单件：Ctrl 直接把该件存入储存格；其余区按「该物品全部堆叠」入库
+            if (zone == ShopTradePayload.Zone.CURIOS) {
+                send(ShopTradePayload.Action.STORE, zone, slot, itemIdOf(stack), stack.getCount());
+            } else {
+                storeAll(itemIdOf(stack));
+            }
         } else if (isDoubleClick("player:" + zone + ":" + slot)) {
             // 可装备物品（护甲 / 饰品）：双击自动装备到对应槽位；否则存入储存格
             if (equippable(stack)) {

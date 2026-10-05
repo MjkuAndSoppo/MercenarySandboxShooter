@@ -9,6 +9,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 
 import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.network.FactionSelectPayload;
+import com.mercenarysandbox.msb.network.MatchStatePayload;
 import com.mercenarysandbox.msb.onboarding.FundingTier;
 import com.mercenarysandbox.msb.onboarding.OnboardingManager;
 
@@ -165,7 +166,11 @@ public final class HandbookScreen extends Screen {
         }
         int[] pos = state.basePositions();
         int i = f.ordinal();
-        return pos != null && pos.length >= i * 3 + 1 && pos[i * 3] >= 0;
+        if (pos == null || pos.length < i * 3 + 3) {
+            return false;
+        }
+        // 未放置 = 首个分量即哨兵 NO_BASE；不可用 x>=0 判断（基地可能建在 x<0 的西侧，docs/02 §3.13）
+        return pos[i * 3] != MatchStatePayload.NO_BASE;
     }
 
     // ===== 渲染 =====

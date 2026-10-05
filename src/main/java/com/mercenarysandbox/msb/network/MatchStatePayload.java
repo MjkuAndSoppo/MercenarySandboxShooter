@@ -11,13 +11,20 @@ import com.mercenarysandbox.msb.client.ClientMatchState;
 
 /**
  * S2C 对局状态载荷（每 2s 广播）：控制区信息 + 三方分数 + 结算倒计时（秒）+
- * 三阵营基地方块坐标（basePositions，顺序 LONESTAR/VALKYRA/MANTICORE，各 {x,z,y}，未放置=-1 表示不可用）。
+ * 三阵营基地方块坐标（basePositions，顺序 LONESTAR/VALKYRA/MANTICORE，各 {x,z,y}；
+ * 未放置的三个分量均为 {@link #NO_BASE}）。
  */
 public record MatchStatePayload(
         int zoneCenterX, int zoneCenterZ, int zoneRadius,
         int countdownSeconds,
         int lonestarScore, int valkyraScore, int manticoreScore,
         int[] basePositions) implements CustomPacketPayload {
+
+    /**
+     * 「未放置基地」哨兵值。不能用 -1：基地可能建在 x=-1（世界原点西侧），
+     * 会与哨兵碰撞导致客户端误判未放置。取世界边界（±30M）之外的极小值以杜绝碰撞。
+     */
+    public static final int NO_BASE = Integer.MIN_VALUE;
 
     public static final Type<MatchStatePayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(MercenarySandboxShooter.MODID, "match_state"));

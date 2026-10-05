@@ -115,6 +115,8 @@ public class MercenarySandboxShooter {
         com.mercenarysandbox.msb.economy.HonorAttachments.ATTACHMENT_TYPES.register(modEventBus);
         // 雇佣兵档案（开局资金档位/击杀倍率/AI 数量，copyOnDeath）
         MercenaryProfileAttachments.ATTACHMENT_TYPES.register(modEventBus);
+        // 耐力真值（饱食度/饱和度魔改，docs/02 §3.15）
+        com.mercenarysandbox.msb.stamina.StaminaAttachments.ATTACHMENT_TYPES.register(modEventBus);
 
         NeoForge.EVENT_BUS.register(this);
 

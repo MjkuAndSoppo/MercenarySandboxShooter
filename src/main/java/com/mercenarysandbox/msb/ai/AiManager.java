@@ -81,6 +81,24 @@ public final class AiManager {
         return instance;
     }
 
+    /**
+     * 卸载全部 AI：清空单位列表与复活队列，并兜底清理世界中残留的 AI 实体。
+     * 每次进入存档、以及开局前调用 —— 未开局时世界内不应存在任何滞留 AI。
+     */
+    public void despawnAll() {
+        for (List<AiCombatantEntity> list : units.values()) {
+            for (AiCombatantEntity e : list) {
+                leaveTeam(e);
+                e.discard();
+            }
+            list.clear();
+        }
+        for (Deque<Long> queue : respawnQueue.values()) {
+            queue.clear();
+        }
+        purgeStaleUnits();
+    }
+
     /** 初始填充：各阵营补齐到目标人数（服务器启动时真人 = 0，即全量 AI） */
     public void reconcileAll() {
         for (Faction f : units.keySet()) {

@@ -67,12 +67,9 @@ public final class OnboardingManager {
         player.setData(MercenaryProfileAttachments.PROFILE,
                 new MercenaryProfile(tier.getId(), (int) Math.round(tier.killMultiplier() * 100.0D), ai));
 
-        // ④ 本阵营开局 AI 目标（首个选择者写入）；三阵营齐备 → 开局门槛满足，正式开局（其余情况等待）
+        // ④ 本阵营开局 AI 目标（首个选择者写入）；开局仅由 OP /MSBS game start 触发（M3 改为 Tab 投票开局）
         FactionSetupData setup = FactionSetupData.get(player.server);
         setup.setTargetIfAbsent(faction, ai);
-        if (setup.allChosen()) {
-            MatchManager.get(player.server).startMatch();
-        }
 
         // ⑤ 传送：有基地 → 基地上方 1 格；无基地 → 提示「无基地配置」并跳过
         BlockPos base = MatchManager.get(player.server).getBasePos(faction);

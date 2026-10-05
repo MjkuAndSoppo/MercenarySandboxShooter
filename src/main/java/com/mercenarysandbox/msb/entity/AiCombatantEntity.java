@@ -101,6 +101,10 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     private static final double PARACHUTE_STEER_RANGE = 4.0D;
     /** 开伞期间耐久磨损间隔（tick，对齐 SBW 伞的 40 tick / 1 点） */
     private static final int PARACHUTE_WEAR_INTERVAL = 40;
+    /** 主动跳伞：站在地面时高于落点该格数以上即主动起跃脱离高地（格） */
+    private static final double PARACHUTE_LEAP_MIN_HEIGHT = 8.0D;
+    /** 主动跳伞的水平起跃推力（格/tick） */
+    private static final double PARACHUTE_LEAP_PUSH = 0.30D;
 
     /** 装备容器：初始副武器 + 弹药（掉落受 /MSBS AIpmc drop 控制） */
     private final SimpleContainer equipment = new SimpleContainer(CONTAINER_SIZE);
@@ -285,13 +289,21 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
     /**
      * 降落伞缓降：装备容器内有降落伞且垂直速度 < -0.6、已下落 > 4 格时自动开伞；
      * 开伞期间压低垂直下落速度、沿视线水平方向滑翔并免疫摔落伤害，落地自动收伞可重复使用；
+     * 站在地面且远高于落点时会主动起跃脱离高地（见 {@link #tryProactiveLeap()}）；
      * 每 40 tick 磨损 1 点耐久，耐久耗尽后伞损毁、失去缓降能力。
      */
     private void tickParachute() {
         ItemStack chute = equipment.getItem(SLOT_PARACHUTE);
-        if (!isParachute(chute) || onGround()) {
+        if (!isParachute(chute)) {
             setParachuteOpen(false);
             parachuteWearTimer = 0;
+            return;
+        }
+        if (onGround()) {
+            setParachuteOpen(false);
+            parachuteWearTimer = 0;
+            // 高处主动跳伞：站在地面但远高于跳伞落点时，主动朝落点起跃脱离高地（寻路不会走下悬崖）
+            tryProactiveLeap();
             return;
         }
         Vec3 movement = getDeltaMovement();
@@ -328,6 +340,33 @@ public class AiCombatantEntity extends PathfinderMob implements Container {
                 chute.setDamageValue(damage);
             }
         }
+    }
+
+    /**
+     * 高处主动跳伞：AI 复活/出生在远高于落点的高地时只会站在地面（寻路不会走下悬崖），
+     * 这里主动朝跳伞落点方向起跃；离地后由 {@link #tickParachute()} 的下落判定自动开伞滑翔。
+     * 地面期间每 tick 施加一次「向前 + 向上」冲量，形成连续跃进，直到越过崖缘脱离高地。
+     * 交战中（有攻击目标）不主动起跃，交由战斗 goal 处理。
+     */
+    private void tryProactiveLeap() {
+        BlockPos target = glideTarget;
+        if (target == null || getTarget() != null || getY() - target.getY() < PARACHUTE_LEAP_MIN_HEIGHT) {
+            return;
+        }
+        double dx = target.getX() + 0.5D - getX();
+        double dz = target.getZ() + 0.5D - getZ();
+        double len = Math.sqrt(dx * dx + dz * dz);
+        if (len < 1.0E-4D) {
+            return;
+        }
+        // 头部与身体朝向落点（否则沿用原朝向、朝后方起跃，观感诡异）
+        float wanted = (float) (Mth.atan2(dz, dx) * (180.0D / Math.PI)) - 90.0F;
+        setYRot(wanted);
+        setYBodyRot(wanted);
+        yHeadRot = wanted;
+        // 朝落点起跃（向上冲量使其离地，离地后重力接管 → 下落判定开伞）
+        setDeltaMovement(dx / len * PARACHUTE_LEAP_PUSH, 0.42D, dz / len * PARACHUTE_LEAP_PUSH);
+        hasImpulse = true;
     }
 
     /** 是否为 SBW 降落伞（按公开注册名判定） */

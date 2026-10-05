@@ -286,7 +286,7 @@ public final class TacticalMapScreen extends Screen {
         g.drawCenteredString(font, label, x0 + BTN_W / 2, y0 + (BTN_H - font.lineHeight) / 2 + 1, 0xFFFFFF);
     }
 
-    /** 三阵营基地方块标记（docs/02 §5.1）：阵营色安全区范围圈 + 方块点 + B 字母；坐标来自 state.basePositions（{x,z,y}×3，-1=未放置） */
+    /** 三阵营基地方块标记（docs/02 §5.1）：阵营色安全区范围圈 + 方块点 + B 字母；坐标来自 state.basePositions（{x,z,y}×3，{@link MatchStatePayload#NO_BASE}=未放置） */
     private void drawBases(GuiGraphics g, int cx, int cy, double scale, MatchStatePayload state) {
         if (state == null || state.basePositions() == null) {
             return;
@@ -295,7 +295,7 @@ public final class TacticalMapScreen extends Screen {
         int[] ringColors = {0x66FF5555, 0x6655AFFF, 0x6655FF55}; // LONESTAR / VALKYRA / MANTICORE（含 alpha）
         int[] colors = {0xFF5555, 0x55AFFF, 0x55FF55};
         for (int i = 0; i < 3; i++) {
-            if (pos[i * 3] == -1) {
+            if (pos[i * 3] == MatchStatePayload.NO_BASE) {
                 continue;
             }
             // 安全区范围圈（半径与服务器 Config.BASE_RADIUS 一致；drawRing 自带屏外剔除）

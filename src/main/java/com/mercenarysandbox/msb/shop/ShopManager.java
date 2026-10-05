@@ -1,5 +1,8 @@
 package com.mercenarysandbox.msb.shop;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.mercenarysandbox.msb.Config;
 import com.mercenarysandbox.msb.economy.HonorAttachments;
 import com.mercenarysandbox.msb.economy.PlayerWallet;
@@ -14,6 +17,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.Item;
@@ -181,7 +185,7 @@ public final class ShopManager {
         }
         int earn = count * entry.sellPrice(Config.SHOP_SELL_RATIO.get());
         stack.shrink(count);
-        player.getInventory().setChanged();
+        markPlayerSlot(player, p.zone(), p.slot(), stack);
         setWallet(player, wallet.spent(), wallet.total() + earn);
         WeightService.apply(player);
         result(player, p.action(), ShopCode.OK, p.item(), count, earn, 0);
@@ -247,7 +251,7 @@ public final class ShopManager {
             return;
         }
         stack.shrink(count);
-        player.getInventory().setChanged();
+        markPlayerSlot(player, p.zone(), p.slot(), stack);
         addToStorage(storage, item, count, 0);
         WeightService.apply(player);
         result(player, p.action(), ShopCode.OK, item, count, 0, 0);
@@ -348,6 +352,11 @@ public final class ShopManager {
             result(player, p.action(), ShopCode.UNKNOWN_ITEM, p.item(), 1, 0, 0);
             return;
         }
+        // 已在饰品槽的饰品双击不再「再装备」：避免自我替换导致物品复制
+        if (p.zone() == ShopTradePayload.Zone.CURIOS) {
+            result(player, p.action(), ShopCode.OK, p.item(), 1, 0, 0);
+            return;
+        }
         EquipmentSlot armorSlot = armorSlotOf(source);
         String curioSlot = armorSlot == null ? curioSlotOf(source, player) : null;
         if (armorSlot == null && curioSlot == null) {
@@ -412,13 +421,75 @@ public final class ShopManager {
         return CuriosApi.getItemStackSlots(stack, player).keySet().stream().findFirst().orElse(null);
     }
 
-    private static IDynamicStackHandler curioStacks(ServerPlayer player, String slot) {
-        ICuriosItemHandler handler = CuriosApi.getCuriosInventory(player).orElse(null);
+    private static IDynamicStackHandler curioStacks(LivingEntity entity, String slot) {
+        ICuriosItemHandler handler = CuriosApi.getCuriosInventory(entity).orElse(null);
         if (handler == null) {
             return null;
         }
         ICurioStacksHandler stacksHandler = handler.getStacksHandler(slot).orElse(null);
         return stacksHandler == null ? null : stacksHandler.getStacks();
+    }
+
+    // ===== Curios 饰品槽扁平映射（客户端 ShopScreen 与服务端必须使用同一顺序） =====
+
+    /** 饰品区第 n 格 → 具体 Curios 子槽位（槽标识 + 槽内下标） */
+    public record CurioSlot(String id, int index) {
+    }
+
+    /** 饰品区槽位顺序：按槽标识字典序，再按槽内下标展平（结构稳定，客户端/服务端一致） */
+    public static List<CurioSlot> curioSlots(LivingEntity entity) {
+        ICuriosItemHandler handler = CuriosApi.getCuriosInventory(entity).orElse(null);
+        if (handler == null) {
+            return List.of();
+        }
+        var curios = handler.getCurios();
+        if (curios == null || curios.isEmpty()) {
+            return List.of();
+        }
+        List<String> ids = new ArrayList<>(curios.keySet());
+        ids.sort(String::compareTo);
+        List<CurioSlot> out = new ArrayList<>();
+        for (String id : ids) {
+            ICurioStacksHandler stacksHandler = curios.get(id);
+            if (stacksHandler == null) {
+                continue;
+            }
+            int slots = stacksHandler.getStacks().getSlots();
+            for (int i = 0; i < slots; i++) {
+                out.add(new CurioSlot(id, i));
+            }
+        }
+        return out;
+    }
+
+    /** 读取饰品区扁平下标对应槽位的堆叠（活引用，可直接 shrink；越界返回空） */
+    public static ItemStack curioStack(LivingEntity entity, int flat) {
+        CurioSlot ref = curioSlotAt(entity, flat);
+        if (ref == null) {
+            return ItemStack.EMPTY;
+        }
+        IDynamicStackHandler stacks = curioStacks(entity, ref.id());
+        if (stacks == null || ref.index() >= stacks.getSlots()) {
+            return ItemStack.EMPTY;
+        }
+        return stacks.getStackInSlot(ref.index());
+    }
+
+    /** 写入饰品区扁平下标对应槽位（越界忽略） */
+    public static void setCurioStack(LivingEntity entity, int flat, ItemStack stack) {
+        CurioSlot ref = curioSlotAt(entity, flat);
+        if (ref == null) {
+            return;
+        }
+        IDynamicStackHandler stacks = curioStacks(entity, ref.id());
+        if (stacks != null && ref.index() < stacks.getSlots()) {
+            stacks.setStackInSlot(ref.index(), stack);
+        }
+    }
+
+    private static CurioSlot curioSlotAt(LivingEntity entity, int flat) {
+        List<CurioSlot> slots = curioSlots(entity);
+        return flat >= 0 && flat < slots.size() ? slots.get(flat) : null;
     }
 
     /** 替换下来的物品移交储存格（满则入包，再满则掉落） */
@@ -457,8 +528,18 @@ public final class ShopManager {
                     inv.items.set(slot, value);
                 }
             }
+            case CURIOS -> setCurioStack(inv.player, slot, value);
             case STORAGE -> {
             }
+        }
+    }
+
+    /** 玩家栏槽位变更后通知对应容器（Curios 不走原版 Inventory，需显式回写以触发同步） */
+    private static void markPlayerSlot(ServerPlayer player, ShopTradePayload.Zone zone, int slot, ItemStack stack) {
+        if (zone == ShopTradePayload.Zone.CURIOS) {
+            setCurioStack(player, slot, stack);
+        } else {
+            player.getInventory().setChanged();
         }
     }
 
@@ -574,6 +655,7 @@ public final class ShopManager {
             case OFFHAND -> slot == 0 ? inv.offhand.get(0) : ItemStack.EMPTY;
             case MAIN -> slot >= 0 && slot < 27 ? inv.items.get(slot + 9) : ItemStack.EMPTY;
             case HOTBAR -> slot >= 0 && slot < 9 ? inv.items.get(slot) : ItemStack.EMPTY;
+            case CURIOS -> curioStack(player, slot);
             case STORAGE -> ItemStack.EMPTY;
         };
     }

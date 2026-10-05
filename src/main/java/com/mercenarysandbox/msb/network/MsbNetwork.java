@@ -13,8 +13,8 @@ import com.mercenarysandbox.msb.MercenarySandboxShooter;
  */
 @EventBusSubscriber(modid = MercenarySandboxShooter.MODID, bus = EventBusSubscriber.Bus.MOD)
 public final class MsbNetwork {
-    /** 协议版本：新增开局手册/阵营选择载荷后升为 4（客户端/服务端需同版本） */
-    private static final String PROTOCOL_VERSION = "4";
+    /** 协议版本：新增耐力百分比载荷后升为 5（客户端/服务端需同版本） */
+    private static final String PROTOCOL_VERSION = "5";
 
     @SubscribeEvent
     public static void registerPayloads(RegisterPayloadHandlersEvent event) {
@@ -33,6 +33,8 @@ public final class MsbNetwork {
         // 开局流程：手册打开（S2C） + 阵营选择提交（C2S）
         registrar.playToClient(HandbookOpenPayload.TYPE, HandbookOpenPayload.STREAM_CODEC, HandbookOpenPayload::handle);
         registrar.playToServer(FactionSelectPayload.TYPE, FactionSelectPayload.STREAM_CODEC, FactionSelectPayload::handle);
+        // 耐力系统（docs/02 §3.15）：精确耐力百分比（S2C，仅发本人）——原版食物包只有 1/20 量化
+        registrar.playToClient(StaminaPayload.TYPE, StaminaPayload.STREAM_CODEC, StaminaPayload::handle);
     }
 
     private MsbNetwork() {

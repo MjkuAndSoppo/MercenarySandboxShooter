@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -27,15 +28,14 @@ import com.mercenarysandbox.msb.faction.Faction;
 import com.mercenarysandbox.msb.faction.FactionManager;
 import com.mercenarysandbox.msb.network.MatchStatePayload;
 import com.mercenarysandbox.msb.network.UnitPositionsPayload;
-import com.mercenarysandbox.msb.onboarding.FactionSetupData;
 
 /**
  * 对局管理器（服务端单例，按 MinecraftServer 实例隔离）。
- * 负责：控制区初始化、30s 结算计分、每 2s 广播 MatchState、
+ * 负责：控制区初始化、30s 结算计分、每秒广播 MatchState、
  * 战术地图单位广播（docs/02 §3.9：每 4 tick 与 AI 惰性推进同频）。
  */
 public final class MatchManager {
-    /** 状态广播周期（tick）：每 20 tick（1s）处理一次倒计时与广播 */
+    /** 每秒对应的 tick 数：每秒一次状态广播 + 结算倒计时递减 */
     private static final int SECOND_TICKS = 20;
     /** 战术地图单位广播周期（tick）：与 AI 惰性推进（AiManager 每 4 tick）同频 */
     private static final int UNIT_BROADCAST_TICKS = 4;
@@ -56,7 +56,8 @@ public final class MatchManager {
     private final Map<Faction, ControlZone> baseZones = new EnumMap<>(Faction.class);
     private final Map<Faction, Integer> scores = new EnumMap<>(Faction.class);
     private final Map<UUID, Integer> lastHurtTick = new HashMap<>();
-    private int countdownTicks;
+    /** 结算倒计时（秒）——每秒递减一次，与 `tickCounter % SECOND_TICKS` 同频 */
+    private int countdownSeconds;
     private int tickCounter;
     private int unitTickCounter;
     private int baseRegenTick;
@@ -82,7 +83,7 @@ public final class MatchManager {
         ServerLevel overworld = server.overworld();
         BlockPos spawn = overworld.getSharedSpawnPos();
         this.zone = new ControlZone(spawn.getX(), spawn.getY(), spawn.getZ(), Config.CONTROL_ZONE_RADIUS.get());
-        this.countdownTicks = Config.SETTLE_INTERVAL_SECONDS.get() * SECOND_TICKS;
+        this.countdownSeconds = Config.SETTLE_INTERVAL_SECONDS.get();
         for (Faction f : Faction.values()) {
             if (f != Faction.NONE) {
                 scores.put(f, 0);
@@ -91,10 +92,10 @@ public final class MatchManager {
         FactionManager.ensureTeams(server.getScoreboard());
         // 恢复持久化的基地坐标（重进存档后安全区仍生效）
         restoreBases();
-        // 开局门槛（docs/02 §3.14）：三阵营均已确认 AI 数量 → 自动开局；否则等待选择完成或 OP /MSBS game start 强开
-        this.started = FactionSetupData.get(server).allChosen();
-        // 基地方块不自动放置：由玩家放置 base_block_* 方块动态注册（docs/02 §3.13）
-        AiManager.get(server).reconcileAll();
+        // 严格开局门槛（docs/02 §3.14）：每次进入存档都必须重新开局，仅 OP /MSBS game start 触发（M3 改为 Tab 投票开局）
+        this.started = false;
+        // 未开局时世界内不应存在任何滞留 AI：清理存档遗留单位，等待开局后重新生成
+        AiManager.get(server).despawnAll();
         MercenarySandboxShooter.LOGGER.info("MSB 控制区初始化: 圆心({},{},{}) 半径{} 结算{}s",
                 zone.getCenterX(), zone.getCenterY(), zone.getCenterZ(), zone.getRadius(), Config.SETTLE_INTERVAL_SECONDS.get());
     }
@@ -119,7 +120,7 @@ public final class MatchManager {
         MercenarySandboxShooter.LOGGER.info("MSB 基地方块注册: {} 位置({},{},{}) 安全区半径{}",
                 faction.name(), pos.getX(), pos.getY(), pos.getZ(), Config.BASE_RADIUS.get());
         broadcastState();
-        // 无基地时 AI 不生成；放置后立即补足该阵营 AI（docs/02 §3.12）
+        // 无基地时 AI 不生成；开局后放置会立即补足该阵营 AI（开局门槛未满足时不动作，docs/02 §3.12）
         AiManager.get(server).onBasePlaced(faction);
     }
 
@@ -176,7 +177,13 @@ public final class MatchManager {
             return;
         }
         started = true;
-        countdownTicks = Config.SETTLE_INTERVAL_SECONDS.get() * SECOND_TICKS;
+        countdownSeconds = Config.SETTLE_INTERVAL_SECONDS.get();
+        // 开局后由 mod 全权接管死亡掉落，强制保留物品栏规则（避免原版掉落与本 mod 结算叠加）
+        for (ServerLevel level : server.getAllLevels()) {
+            level.getGameRules().getRule(GameRules.RULE_KEEPINVENTORY).set(true, server);
+        }
+        // 开局前先卸载滞留 AI，再按目标重新生成，避免残留单位与本次生成混淆
+        AiManager.get(server).despawnAll();
         AiManager.get(server).reconcileAll();
         broadcastState();
         server.getPlayerList().broadcastSystemMessage(Component.translatable("msb.game.started"), false);
@@ -198,15 +205,15 @@ public final class MatchManager {
             regenFriendlyVehicles();
         }
         if (tickCounter % SECOND_TICKS == 0) {
-            broadcastState();
-            // 开局门槛未满足时不推进结算倒计时（控制区计分不激活，docs/02 §3.14）
+            // 结算倒计时：每秒递减 1 次（started 前不推进，docs/02 §3.14）
             if (started) {
-                countdownTicks--;
-                if (countdownTicks <= 0) {
+                countdownSeconds--;
+                if (countdownSeconds <= 0) {
                     settle();
-                    countdownTicks = Config.SETTLE_INTERVAL_SECONDS.get() * SECOND_TICKS;
+                    countdownSeconds = Config.SETTLE_INTERVAL_SECONDS.get();
                 }
             }
+            broadcastState();
         }
     }
 
@@ -321,12 +328,12 @@ public final class MatchManager {
                 basePos[i * 3 + 1] = p.getZ();
                 basePos[i * 3 + 2] = p.getY();
             } else {
-                basePos[i * 3] = basePos[i * 3 + 1] = basePos[i * 3 + 2] = -1;
+                basePos[i * 3] = basePos[i * 3 + 1] = basePos[i * 3 + 2] = MatchStatePayload.NO_BASE;
             }
         }
         return new MatchStatePayload(
                 zone.getCenterX(), zone.getCenterZ(), zone.getRadius(),
-                Math.max(0, countdownTicks / SECOND_TICKS),
+                Math.max(0, countdownSeconds),
                 scores.getOrDefault(Faction.LONESTAR, 0),
                 scores.getOrDefault(Faction.VALKYRA, 0),
                 scores.getOrDefault(Faction.MANTICORE, 0),

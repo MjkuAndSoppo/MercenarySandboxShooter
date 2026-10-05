@@ -49,6 +49,13 @@ public class Config {
             .comment("Friendly vehicle health regen interval in seconds while inside base safe zone")
             .defineInRange("baseRegenIntervalSeconds", 2, 1, 30);
 
+    // ===== 无人机视野强加载 =====
+    /** 被操控的 SBW 无人机周围强加载的区块半径（0 = 关闭）；每 1 格 = 16 方块，开销随半径平方增长 */
+    public static final ModConfigSpec.IntValue DRONE_CHUNK_RADIUS = BUILDER
+            .comment("Force-load chunk radius (in chunks) around a player-controlled SBW drone so its view stays loaded",
+                    "0 disables. Cost grows with radius squared (8 = 17x17 = 289 chunks per drone)")
+            .defineInRange("droneChunkRadius", 8, 0, 16);
+
     // ===== 战术地图（docs/02 §3.9）=====
     public static final ModConfigSpec.BooleanValue TACTICAL_MAP_ROTATE_WITH_PLAYER = BUILDER
             .comment("Rotate the tactical map with the player's facing direction. Disable for a fixed north-up map")
@@ -146,6 +153,85 @@ public class Config {
     public static final ModConfigSpec.DoubleValue WEIGHT_WARN_RATIO = BUILDER
             .comment("Weight ratio where the slowdown starts (0.6 = 60 percent)")
             .defineInRange("weightWarnRatio", 0.6D, 0.0D, 1.0D);
+
+    // ===== 耐力系统（docs/02 §3.15：饱食度/饱和度魔改）=====
+    /** 耐力上限（点）；对应 HUD 条满格 */
+    public static final ModConfigSpec.DoubleValue STAMINA_MAX = BUILDER
+            .comment("Stamina capacity (points). The vanilla food bar is repurposed as a stamina percentage gauge")
+            .defineInRange("staminaMax", 20.0D, 1.0D, 1000.0D);
+
+    /** 冲刺消耗（点 / 每个计费周期） */
+    public static final ModConfigSpec.DoubleValue STAMINA_SPRINT_COST = BUILDER
+            .comment("Stamina cost per sprint billing cycle")
+            .defineInRange("staminaSprintCost", 1.0D, 0.0D, 1000.0D);
+
+    /** 冲刺计费周期（tick）：每满该周期扣一次冲刺消耗，默认 40 = 2s */
+    public static final ModConfigSpec.IntValue STAMINA_SPRINT_INTERVAL_TICKS = BUILDER
+            .comment("Sprint billing cycle in ticks (40 = 2s per staminaSprintCost)")
+            .defineInRange("staminaSprintIntervalTicks", 40, 1, 1200);
+
+    /** 跳跃消耗（点/次，含非冲刺跳） */
+    public static final ModConfigSpec.DoubleValue STAMINA_JUMP_COST = BUILDER
+            .comment("Stamina cost per jump (including non-sprint jumps)")
+            .defineInRange("staminaJumpCost", 1.0D, 0.0D, 1000.0D);
+
+    /** 近战命中消耗（点/次） */
+    public static final ModConfigSpec.DoubleValue STAMINA_MELEE_COST = BUILDER
+            .comment("Stamina cost per melee hit")
+            .defineInRange("staminaMeleeCost", 0.5D, 0.0D, 1000.0D);
+
+    /** 投掷消耗（点/次，仅作用于白名单物品） */
+    public static final ModConfigSpec.DoubleValue STAMINA_THROW_COST = BUILDER
+            .comment("Stamina cost per thrown item (only items listed in staminaThrowItems)")
+            .defineInRange("staminaThrowCost", 1.0D, 0.0D, 1000.0D);
+
+    /** 投掷物白名单（物品注册名）：右键使用这些物品按投掷计费 */
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> STAMINA_THROW_ITEMS = BUILDER
+            .comment("Item registry names treated as throws for stamina cost (e.g. minecraft:snowball)")
+            .defineListAllowEmpty("staminaThrowItems", List.of(
+                    "minecraft:snowball", "minecraft:egg", "minecraft:ender_pearl",
+                    "minecraft:splash_potion", "minecraft:lingering_potion", "minecraft:experience_bottle"),
+                    () -> "", Config::validateItemName);
+
+    /** 回复延迟（tick）：最后一次消耗后多久开始自然回复，默认 60 = 3s */
+    public static final ModConfigSpec.IntValue STAMINA_REGEN_DELAY_TICKS = BUILDER
+            .comment("Delay in ticks after the last stamina use before natural regeneration starts (60 = 3s)")
+            .defineInRange("staminaRegenDelayTicks", 60, 0, 12000);
+
+    /** 自然回复周期（tick）：每满该周期回复一次，默认 40 = 2s */
+    public static final ModConfigSpec.IntValue STAMINA_REGEN_INTERVAL_TICKS = BUILDER
+            .comment("Natural regeneration interval in ticks (40 = 2s per staminaRegenAmount)")
+            .defineInRange("staminaRegenIntervalTicks", 40, 1, 1200);
+
+    /** 自然回复量（点 / 每个回复周期） */
+    public static final ModConfigSpec.DoubleValue STAMINA_REGEN_AMOUNT = BUILDER
+            .comment("Stamina restored per natural regeneration cycle")
+            .defineInRange("staminaRegenAmount", 1.0D, 0.0D, 1000.0D);
+
+    /** 基地安全区内回复倍率（×） */
+    public static final ModConfigSpec.DoubleValue STAMINA_BASE_REGEN_MULTIPLIER = BUILDER
+            .comment("Regeneration multiplier while inside your faction base safe zone")
+            .defineInRange("staminaBaseRegenMultiplier", 3.0D, 0.0D, 100.0D);
+
+    /** 食物逐渐回复时长（秒）：吃下食物后在该时长内摊分回复（营养 / 时长）= 每秒回复量 */
+    public static final ModConfigSpec.DoubleValue STAMINA_FOOD_REGEN_SECONDS = BUILDER
+            .comment("Seconds over which eaten food restores stamina (nutrition / seconds per second)")
+            .defineInRange("staminaFoodRegenSeconds", 5.0D, 0.0D, 600.0D);
+
+    /** 溢出换血比：耐力已满时，每 N 点回复量兑换 1 HP */
+    public static final ModConfigSpec.DoubleValue STAMINA_OVERFLOW_PER_HEALTH = BUILDER
+            .comment("Stamina overflow needed per 1 HP healed when stamina is full")
+            .defineInRange("staminaOverflowPerHealth", 2.0D, 0.1D, 1000.0D);
+
+    /** 力竭解除阈值（点）：耐力从 0 回复到该值才解除力竭（滞回） */
+    public static final ModConfigSpec.DoubleValue STAMINA_EXHAUST_RELEASE = BUILDER
+            .comment("Stamina required to leave the exhausted state (hysteresis)")
+            .defineInRange("staminaExhaustRelease", 3.0D, 0.0D, 1000.0D);
+
+    /** 力竭减速（比例）：移速 -该值，默认 0.15 = -15% */
+    public static final ModConfigSpec.DoubleValue STAMINA_EXHAUST_SPEED_PENALTY = BUILDER
+            .comment("Movement speed penalty while exhausted (0.15 = -15 percent)")
+            .defineInRange("staminaExhaustSpeedPenalty", 0.15D, 0.0D, 0.9D);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 
